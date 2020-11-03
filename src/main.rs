@@ -40,21 +40,31 @@ impl TodoList {
     }
 
     fn print(&self) {
-        for (index, item) in self.list.iter().enumerate() {
-            println!("{}. [{}] - {}", index, item.completed, item.name);
+        if self.list.len() > 0 {
+            for (index, item) in self.list.iter().enumerate() {
+                println!("{}. [{}] - {}", index, item.completed, item.name);
+            }
+        } else {
+            println!("There is no todos")
         }
     }
 
-    fn toggle_task(&mut self, index: usize) {
-        if self.list[index].completed == ' ' {
+    fn toggle_task(&mut self, index: usize) -> bool {
+        return if self.list[index].completed == ' ' {
             self.list[index].completed = 'X';
+            true
         } else {
-            self.list[index].completed = ' '
+            self.list[index].completed = ' ';
+            false
         }
     }
 
     fn remove_task(&mut self, index: usize) {
         self.list.remove(index);
+    }
+
+    fn get_task(&mut self, index: usize) -> &TodoItem {
+        &self.list[index]
     }
 }
 
@@ -94,17 +104,25 @@ fn main() {
         Command::List => todo_list.print(),
         Command::Add(task_name) => {
             todo_list.add(TodoItem::new(task_name.to_string()));
-            todo_list.print();
+            println!("{} added!", task_name.to_string());
+
             dump(path_to_file.to_string(), Data { items: todo_list.list });
         },
         Command::TICK(task_index) => {
-            todo_list.toggle_task(task_index);
-            todo_list.print();
+            let done = todo_list.toggle_task(task_index);
+            let task = todo_list.get_task(task_index);
+            if done {
+                println!("{} is set to DONE.", task.name);
+            } else {
+                println!("{} is set to NOT DONE.", task.name);
+            }
+
             dump(path_to_file.to_string(), Data { items: todo_list.list });
         },
         Command::REMOVE(task_index) => {
             todo_list.remove_task(task_index);
-            todo_list.print();
+            println!("Task is removed");
+
             dump(path_to_file.to_string(), Data { items: todo_list.list });
         }
     }
