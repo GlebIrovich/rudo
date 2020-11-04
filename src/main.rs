@@ -1,4 +1,4 @@
-use std::{env, fs};
+use std::{env, fs, thread};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -80,7 +80,72 @@ fn dump(path_to_file: String, data: Data) {
     fs::write(path_to_file, content).expect("Data cannot be saved");
 }
 
-fn main() {
+use std::io;
+use termion::raw::IntoRawMode;
+use tui::Terminal;
+use tui::backend::{TermionBackend, Backend};
+use tui::widgets::{Widget, Block, Borders};
+use tui::layout::{Layout, Constraint, Direction};
+use termion::event::Key;
+use termion::input::TermRead;
+use std::io::{stdin, stdout, Write};
+use std::sync::mpsc;
+
+enum Event {
+    QUIT
+}
+
+fn main() -> Result<(), io::Error> {
+    let stdin = stdin();
+    let stdout = stdout().into_raw_mode()?;
+    let backend = TermionBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Clean screen
+    terminal.clear();
+
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        //detecting keydown events
+        for c in stdin.keys() {
+            match c.unwrap() {
+                Key::Char('h') => println!("Hello world!"),
+                Key::Char('q') => {
+                    tx.send(Event::QUIT).unwrap();
+                    break;
+                },
+                _ => (),
+            }
+
+            // stdout.flush().unwrap();
+        }
+    });
+
+    loop {
+        terminal.draw(|f| {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints([Constraint::Percentage(10), Constraint::Min(0)].as_ref())
+                .split(f.size());
+            let block = Block::default()
+                .title("Block")
+                .borders(Borders::ALL);
+            f.render_widget(block, chunks[1]);
+        });
+
+        match rx.recv().unwrap() {
+            Event::QUIT => {
+                break
+                Result::Ok(())
+            },
+        }
+    }
+}
+
+
+fn main1() {
     let path_to_file = "./src/todos.json";
     let file = fs::read_to_string(path_to_file).expect("Unable to read file");
     let data: Data = serde_json::from_str(file.as_str()).expect("Parsing json has failed");
