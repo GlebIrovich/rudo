@@ -43,12 +43,9 @@ struct App {
 }
 
 impl App {
-    fn new() -> App {
+    fn new(items: Vec<TodoItem>) -> App {
         App {
-            items: StatefulList::with_items(vec![
-                TodoItem::new("Eat".to_string()),
-                TodoItem::new("sleep".to_string())
-            ])
+            items: StatefulList::with_items(items),
         }
     }
 }
@@ -62,7 +59,7 @@ impl TodoList {
         TodoList { list: vec![] }
     }
 
-    fn load_data(&mut self, items: Vec<TodoItem>) {
+    fn with_data(&mut self, items: Vec<TodoItem>) {
         for item in items {
             self.list.push(item);
         }
@@ -126,7 +123,8 @@ fn main() -> Result<(), io::Error> {
     let mut terminal = Terminal::new(backend)?;
 
     // Application state
-    let mut app = App::new();
+    let mut todo_list = get_todo_list();
+    let mut app = App::new(todo_list.list);
 
     // Clean screen
     terminal.clear();
@@ -199,6 +197,16 @@ fn main() -> Result<(), io::Error> {
     }
 }
 
+fn get_todo_list() -> TodoList {
+    let path_to_file = "./src/todos.json";
+    let file = fs::read_to_string(path_to_file).expect("Unable to read file");
+    let data: Data = serde_json::from_str(file.as_str()).expect("Parsing json has failed");
+
+    let mut todo_list = TodoList::new();
+    todo_list.with_data(data.items);
+
+    todo_list
+}
 
 fn main1() {
     let path_to_file = "./src/todos.json";
@@ -217,7 +225,7 @@ fn main1() {
     };
 
     let mut todo_list = TodoList::new();
-    todo_list.load_data(data.items);
+    todo_list.with_data(data.items);
 
 
     match command {
