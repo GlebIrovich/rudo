@@ -184,6 +184,7 @@ fn main() -> Result<(), io::Error> {
 
         match rx.recv().unwrap() {
             AppEvent::QUIT => {
+                terminal.clear();
                 break
                 Result::Ok(())
             },
