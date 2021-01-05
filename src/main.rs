@@ -162,15 +162,20 @@ fn main() -> Result<(), io::Error> {
                 .items
                 .items
                 .iter()
-                .map(|item| {
-                    let mut lines = vec![Spans::from(Span::from(item.name.clone()))];
+                .enumerate()
+                .map(|(index, item)| {
+                    let mut lines = vec![Spans::from(
+                        Span::from(
+                            format!("{}. [{}] - {}", index + 1, item.completed, item.name.clone())
+                        )
+                    )];
                     ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
                 })
                 .collect();
 
             // Create a List from all list items and highlight the currently selected one
             let items = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("List"))
+                .block(Block::default().borders(Borders::ALL).title("Todo"))
                 .highlight_style(
                     Style::default()
                         .bg(Color::LightGreen)
@@ -189,7 +194,7 @@ fn main() -> Result<(), io::Error> {
                 Result::Ok(())
             },
             AppEvent::NEXT => app.items.next(),
-            _ => ()
+            AppEvent::PREVIOUS => app.items.previous(),
         }
     }
 }
