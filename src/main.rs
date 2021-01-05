@@ -19,14 +19,14 @@ use std::sync::mpsc;
 use tui::text::{Span, Spans};
 use tui::style::{Style, Modifier, Color};
 
+const PATH_TO_FILE: &str = "./src/todos.json";
+
 #[derive(Debug, Serialize, Deserialize)]
-// #[serde_json(rename_all = "PascalCase")]
 struct Data {
     items: Vec<TodoItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-// #[serde_json(rename_all = "PascalCase")]
 struct TodoItem {
     name: String,
     completed: char
@@ -38,71 +38,53 @@ impl TodoItem {
     }
 }
 
-struct App {
-    items: StatefulList<TodoItem>,
-}
-
-impl App {
-    fn new(items: Vec<TodoItem>) -> App {
-        App {
-            items: StatefulList::with_items(items),
-        }
-    }
-}
-
 struct TodoList {
-    list: Vec<TodoItem>
+    list: StatefulList<TodoItem>,
 }
 
 impl TodoList {
-    fn new() -> TodoList {
-        TodoList { list: vec![] }
-    }
-
-    fn with_data(&mut self, items: Vec<TodoItem>) {
-        for item in items {
-            self.list.push(item);
+    fn new(items: Vec<TodoItem>) -> TodoList {
+        TodoList {
+            list: StatefulList::with_items(items),
         }
     }
 
     fn add(&mut self, item: TodoItem) {
-        self.list.push(item)
+        self.list.items.push(item)
     }
 
-    fn print(&self) {
-        if self.list.len() > 0 {
-            for (index, item) in self.list.iter().enumerate() {
-                println!("{}. [{}] - {}", index, item.completed, item.name);
+    fn toggle_task(&mut self) {
+        match self.list.state.selected() {
+            Some(index) => {
+                if self.list.items[index].completed == ' ' {
+                    self.list.items[index].completed = 'X';
+                } else {
+                    self.list.items[index].completed = ' ';
+                }
+            },
+            _ => ()
+        }
+    }
+
+    fn remove_task(&mut self) {
+        match self.list.state.selected() {
+            Some(index) => {
+                self.list.items.remove(index);
             }
-        } else {
-            println!("There is no todos")
+            _ => ()
         }
-    }
-
-    fn toggle_task(&mut self, index: usize) -> bool {
-        return if self.list[index].completed == ' ' {
-            self.list[index].completed = 'X';
-            true
-        } else {
-            self.list[index].completed = ' ';
-            false
-        }
-    }
-
-    fn remove_task(&mut self, index: usize) {
-        self.list.remove(index);
     }
 
     fn get_task(&mut self, index: usize) -> &TodoItem {
-        &self.list[index]
+        &self.list.items[index]
     }
 }
 
 enum Command {
     List,
     Add(String),
-    TICK(usize),
-    REMOVE(usize)
+    Tick(usize),
+    Remove(usize)
 }
 
 fn dump(path_to_file: String, data: Data) {
@@ -110,10 +92,12 @@ fn dump(path_to_file: String, data: Data) {
     fs::write(path_to_file, content).expect("Data cannot be saved");
 }
 
-enum AppEvent {
-    QUIT,
-    NEXT,
-    PREVIOUS,
+enum TerminalEvent {
+    Quit,
+    Next,
+    Previous,
+    Delete,
+    Tick
 }
 
 fn main() -> Result<(), io::Error> {
@@ -124,7 +108,6 @@ fn main() -> Result<(), io::Error> {
 
     // Application state
     let mut todo_list = get_todo_list();
-    let mut app = App::new(todo_list.list);
 
     // Clean screen
     terminal.clear();
@@ -137,12 +120,15 @@ fn main() -> Result<(), io::Error> {
             match c.unwrap() {
                 Key::Char('h') => println!("Hello world!"),
                 Key::Char('q') => {
-                    tx.send(AppEvent::QUIT).unwrap();
+                    tx.send(TerminalEvent::Quit).unwrap();
                     break;
                 },
-                Key::Down => tx.send(AppEvent::NEXT).unwrap(),
-                Key::Up => tx.send(AppEvent::PREVIOUS).unwrap(),
-                _ => (),
+                Key::Char('d') => tx.send(TerminalEvent::Delete).unwrap(),
+                Key::Down => tx.send(TerminalEvent::Next).unwrap(),
+                Key::Up => tx.send(TerminalEvent::Previous).unwrap(),
+                Key::Char('\n') => tx.send(TerminalEvent::Tick).unwrap(),
+                Key::Char(' ') => tx.send(TerminalEvent::Tick).unwrap(),
+                key => println!("{:?}", key),
             }
         }
     });
@@ -156,8 +142,8 @@ fn main() -> Result<(), io::Error> {
                 .split(frame.size());
 
             // Iterate through all elements in the `items` app and append some debug text to it.
-            let items: Vec<ListItem> = app
-                .items
+            let items: Vec<ListItem> = todo_list
+                .list
                 .items
                 .iter()
                 .enumerate()
@@ -182,76 +168,28 @@ fn main() -> Result<(), io::Error> {
                 .highlight_symbol(">> ");
 
             // We can now render the item list
-            frame.render_stateful_widget(items, chunks[0], &mut app.items.state);
+            frame.render_stateful_widget(items, chunks[0], &mut todo_list.list.state);
         });
 
         match rx.recv().unwrap() {
-            AppEvent::QUIT => {
+            TerminalEvent::Quit => {
                 terminal.clear();
-                break
-                Result::Ok(())
+                dump(PATH_TO_FILE.to_string(), Data {items: todo_list.list.items});
+                break Result::Ok(())
             },
-            AppEvent::NEXT => app.items.next(),
-            AppEvent::PREVIOUS => app.items.previous(),
+            TerminalEvent::Next => todo_list.list.next(),
+            TerminalEvent::Previous => todo_list.list.previous(),
+            TerminalEvent::Delete => todo_list.remove_task(),
+            TerminalEvent::Tick => todo_list.toggle_task(),
         }
     }
 }
 
 fn get_todo_list() -> TodoList {
-    let path_to_file = "./src/todos.json";
-    let file = fs::read_to_string(path_to_file).expect("Unable to read file");
+    let file = fs::read_to_string(PATH_TO_FILE).expect("Unable to read file");
     let data: Data = serde_json::from_str(file.as_str()).expect("Parsing json has failed");
 
-    let mut todo_list = TodoList::new();
-    todo_list.with_data(data.items);
+    let mut todo_list = TodoList::new(data.items);
 
     todo_list
-}
-
-fn main1() {
-    let path_to_file = "./src/todos.json";
-    let file = fs::read_to_string(path_to_file).expect("Unable to read file");
-    let data: Data = serde_json::from_str(file.as_str()).expect("Parsing json has failed");
-
-
-    let arguments: Vec<String> = env::args().collect();
-
-    let command = match arguments[1].as_str() {
-        "list" => Command::List,
-        "add" => Command::Add(arguments[2].clone()),
-        "tick" => Command::TICK(arguments[2].clone().parse().unwrap()),
-        "remove" => Command::REMOVE(arguments[2].clone().parse().unwrap()),
-        _ => panic!("Unknown command")
-    };
-
-    let mut todo_list = TodoList::new();
-    todo_list.with_data(data.items);
-
-
-    match command {
-        Command::List => todo_list.print(),
-        Command::Add(task_name) => {
-            todo_list.add(TodoItem::new(task_name.to_string()));
-            println!("{} added!", task_name.to_string());
-
-            dump(path_to_file.to_string(), Data { items: todo_list.list });
-        },
-        Command::TICK(task_index) => {
-            let done = todo_list.toggle_task(task_index);
-            let task = todo_list.get_task(task_index);
-            if done {
-                println!("{} is set to DONE.", task.name);
-            } else {
-                println!("{} is set to NOT DONE.", task.name);
-            }
-
-            dump(path_to_file.to_string(), Data { items: todo_list.list });
-        },
-        Command::REMOVE(task_index) => {
-            todo_list.remove_task(task_index);
-            println!("Task is removed");
-
-            dump(path_to_file.to_string(), Data { items: todo_list.list });
-        }
-    }
 }
