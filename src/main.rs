@@ -1,5 +1,23 @@
+mod utils;
+
+use crate::utils::{
+    StatefulList,
+};
+
 use std::{env, fs, thread};
 use serde::{Deserialize, Serialize};
+use std::io;
+use termion::raw::IntoRawMode;
+use tui::Terminal;
+use tui::backend::{TermionBackend, Backend};
+use tui::widgets::{Widget, Block, Borders, ListItem, List};
+use tui::layout::{Layout, Constraint, Direction};
+use termion::event::Key;
+use termion::input::TermRead;
+use std::io::{stdin, stdout, Write};
+use std::sync::mpsc;
+use tui::text::{Span, Spans};
+use tui::style::{Style, Modifier, Color};
 
 #[derive(Debug, Serialize, Deserialize)]
 // #[serde_json(rename_all = "PascalCase")]
@@ -17,6 +35,21 @@ struct TodoItem {
 impl TodoItem {
     fn new(name: String) -> TodoItem {
         TodoItem { name, completed: ' ' }
+    }
+}
+
+struct App {
+    items: StatefulList<TodoItem>,
+}
+
+impl App {
+    fn new() -> App {
+        App {
+            items: StatefulList::with_items(vec![
+                TodoItem::new("Eat".to_string()),
+                TodoItem::new("sleep".to_string())
+            ])
+        }
     }
 }
 
@@ -80,19 +113,10 @@ fn dump(path_to_file: String, data: Data) {
     fs::write(path_to_file, content).expect("Data cannot be saved");
 }
 
-use std::io;
-use termion::raw::IntoRawMode;
-use tui::Terminal;
-use tui::backend::{TermionBackend, Backend};
-use tui::widgets::{Widget, Block, Borders};
-use tui::layout::{Layout, Constraint, Direction};
-use termion::event::Key;
-use termion::input::TermRead;
-use std::io::{stdin, stdout, Write};
-use std::sync::mpsc;
-
-enum Event {
-    QUIT
+enum AppEvent {
+    QUIT,
+    NEXT,
+    PREVIOUS,
 }
 
 fn main() -> Result<(), io::Error> {
@@ -100,6 +124,9 @@ fn main() -> Result<(), io::Error> {
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+
+    // Application state
+    let mut app = App::new();
 
     // Clean screen
     terminal.clear();
@@ -112,34 +139,56 @@ fn main() -> Result<(), io::Error> {
             match c.unwrap() {
                 Key::Char('h') => println!("Hello world!"),
                 Key::Char('q') => {
-                    tx.send(Event::QUIT).unwrap();
+                    tx.send(AppEvent::QUIT).unwrap();
                     break;
                 },
+                Key::Down => tx.send(AppEvent::NEXT).unwrap(),
+                Key::Up => tx.send(AppEvent::PREVIOUS).unwrap(),
                 _ => (),
             }
-
-            // stdout.flush().unwrap();
         }
     });
 
     loop {
-        terminal.draw(|f| {
+        terminal.draw(|frame| {
+            // Create two chunks with equal horizontal screen space
             let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints([Constraint::Percentage(10), Constraint::Min(0)].as_ref())
-                .split(f.size());
-            let block = Block::default()
-                .title("Block")
-                .borders(Borders::ALL);
-            f.render_widget(block, chunks[1]);
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                .split(frame.size());
+
+            // Iterate through all elements in the `items` app and append some debug text to it.
+            let items: Vec<ListItem> = app
+                .items
+                .items
+                .iter()
+                .map(|item| {
+                    let mut lines = vec![Spans::from(Span::from(item.name.clone()))];
+                    ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
+                })
+                .collect();
+
+            // Create a List from all list items and highlight the currently selected one
+            let items = List::new(items)
+                .block(Block::default().borders(Borders::ALL).title("List"))
+                .highlight_style(
+                    Style::default()
+                        .bg(Color::LightGreen)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol(">> ");
+
+            // We can now render the item list
+            frame.render_stateful_widget(items, chunks[0], &mut app.items.state);
         });
 
         match rx.recv().unwrap() {
-            Event::QUIT => {
+            AppEvent::QUIT => {
                 break
                 Result::Ok(())
             },
+            AppEvent::NEXT => app.items.next(),
+            _ => ()
         }
     }
 }
