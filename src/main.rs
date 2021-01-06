@@ -1,23 +1,21 @@
 mod utils;
 
-use crate::utils::{
-    StatefulList,
-};
+use crate::utils::StatefulList;
 
-use std::{fs, thread};
 use serde::{Deserialize, Serialize};
 use std::io;
-use termion::raw::IntoRawMode;
-use tui::Terminal;
-use tui::backend::{TermionBackend};
-use tui::widgets::{Block, Borders, ListItem, List, Paragraph};
-use tui::layout::{Layout, Constraint, Direction, Alignment};
-use termion::event::Key;
-use termion::input::TermRead;
 use std::io::{stdin, stdout};
 use std::sync::mpsc;
+use std::{fs, thread};
+use termion::event::Key;
+use termion::input::TermRead;
+use termion::raw::IntoRawMode;
+use tui::backend::TermionBackend;
+use tui::layout::{Alignment, Constraint, Direction, Layout};
+use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::style::{Style, Modifier, Color};
+use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use tui::Terminal;
 
 const PATH_TO_FILE: &str = "./src/todos.json";
 
@@ -29,30 +27,33 @@ struct Data {
 #[derive(Debug, Serialize, Deserialize)]
 struct TodoItem {
     name: String,
-    completed: char
+    completed: char,
 }
 
 enum AppStage {
     Default,
-    CreateNewItem
+    CreateNewItem,
 }
 
 impl TodoItem {
     fn new(name: String) -> TodoItem {
-        TodoItem { name, completed: ' ' }
+        TodoItem {
+            name,
+            completed: ' ',
+        }
     }
 }
 
 struct App {
     list: StatefulList<TodoItem>,
-    stage: AppStage
+    stage: AppStage,
 }
 
 impl App {
     fn new(items: Vec<TodoItem>) -> App {
         App {
             list: StatefulList::new(items),
-            stage: AppStage::Default
+            stage: AppStage::Default,
         }
     }
 
@@ -68,8 +69,8 @@ impl App {
                 } else {
                     self.list.items[index].completed = ' ';
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
     }
 
@@ -78,7 +79,7 @@ impl App {
             Some(index) => {
                 self.list.items.remove(index);
             }
-            _ => ()
+            _ => (),
         }
     }
 
@@ -98,7 +99,7 @@ enum TerminalEvent {
     Previous,
     Delete,
     Tick,
-    StageChange(AppStage)
+    StageChange(AppStage),
 }
 
 fn main() -> Result<(), io::Error> {
@@ -123,15 +124,19 @@ fn main() -> Result<(), io::Error> {
                 Key::Char('q') => {
                     tx.send(TerminalEvent::Quit).unwrap();
                     break;
-                },
+                }
                 Key::Char('d') => tx.send(TerminalEvent::Delete).unwrap(),
                 Key::Down => tx.send(TerminalEvent::Next).unwrap(),
                 Key::Up => tx.send(TerminalEvent::Previous).unwrap(),
                 Key::Char('\n') => tx.send(TerminalEvent::Tick).unwrap(),
                 Key::Char(' ') => tx.send(TerminalEvent::Tick).unwrap(),
 
-                Key::Char('n') => tx.send(TerminalEvent::StageChange(AppStage::CreateNewItem)).unwrap(),
-                Key::Esc => tx.send(TerminalEvent::StageChange(AppStage::Default)).unwrap(),
+                Key::Char('n') => tx
+                    .send(TerminalEvent::StageChange(AppStage::CreateNewItem))
+                    .unwrap(),
+                Key::Esc => tx
+                    .send(TerminalEvent::StageChange(AppStage::Default))
+                    .unwrap(),
                 key => println!("{:?}", key),
             }
         }
@@ -142,11 +147,14 @@ fn main() -> Result<(), io::Error> {
             // Create two chunks with equal horizontal screen space
             let chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(10)
-                ].as_ref())
+                .constraints(
+                    [
+                        Constraint::Percentage(50),
+                        Constraint::Percentage(40),
+                        Constraint::Percentage(10),
+                    ]
+                    .as_ref(),
+                )
                 .split(frame.size());
 
             // Iterate through all elements in the `items` app and append some debug text to it.
@@ -156,11 +164,12 @@ fn main() -> Result<(), io::Error> {
                 .iter()
                 .enumerate()
                 .map(|(index, item)| {
-                    let lines = vec![Spans::from(
-                        Span::from(
-                            format!("{}. [{}] - {}", index + 1, item.completed, item.name.clone())
-                        )
-                    )];
+                    let lines = vec![Spans::from(Span::from(format!(
+                        "{}. [{}] - {}",
+                        index + 1,
+                        item.completed,
+                        item.name.clone()
+                    )))];
                     ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
                 })
                 .collect();
@@ -178,11 +187,7 @@ fn main() -> Result<(), io::Error> {
             // We can now render the item list
             frame.render_stateful_widget(items, chunks[0], &mut app.list.state);
 
-            let create_block = |title| {
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-            };
+            let create_block = |title| Block::default().borders(Borders::ALL).title(title);
 
             // Add input block
             match app.stage {
@@ -192,20 +197,21 @@ fn main() -> Result<(), io::Error> {
                         .alignment(Alignment::Left);
 
                     frame.render_widget(input_block, chunks[1]);
-                },
-                _ => ()
+                }
+                _ => (),
             }
 
             // Debug application state
 
-            let paragraph = Paragraph::new(
-                format!("{}", match app.stage {
+            let paragraph = Paragraph::new(format!(
+                "{}",
+                match app.stage {
                     AppStage::CreateNewItem => "new item",
-                    AppStage::Default => "default"
-                })
-            )
-                .block(create_block("App stage"))
-                .alignment(Alignment::Left);
+                    AppStage::Default => "default",
+                }
+            ))
+            .block(create_block("App stage"))
+            .alignment(Alignment::Left);
 
             frame.render_widget(paragraph, chunks[2]);
         });
@@ -213,9 +219,14 @@ fn main() -> Result<(), io::Error> {
         match rx.recv().unwrap() {
             TerminalEvent::Quit => {
                 terminal.clear();
-                dump(PATH_TO_FILE.to_string(), Data {items: app.list.items});
-                break Result::Ok(())
-            },
+                dump(
+                    PATH_TO_FILE.to_string(),
+                    Data {
+                        items: app.list.items,
+                    },
+                );
+                break Result::Ok(());
+            }
             TerminalEvent::Next => app.list.next(),
             TerminalEvent::Previous => app.list.previous(),
             TerminalEvent::Delete => app.remove_task(),

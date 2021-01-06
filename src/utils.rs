@@ -5,7 +5,7 @@ pub struct StatefulList<T> {
     pub items: Vec<T>,
 }
 
-impl <T> StatefulList<T> {
+impl<T> StatefulList<T> {
     pub fn new(items: Vec<T>) -> StatefulList<T> {
         StatefulList {
             state: ListState::default(),
