@@ -4,17 +4,17 @@ use crate::utils::{
     StatefulList,
 };
 
-use std::{env, fs, thread};
+use std::{fs, thread};
 use serde::{Deserialize, Serialize};
 use std::io;
 use termion::raw::IntoRawMode;
 use tui::Terminal;
-use tui::backend::{TermionBackend, Backend};
-use tui::widgets::{Widget, Block, Borders, ListItem, List};
-use tui::layout::{Layout, Constraint, Direction};
+use tui::backend::{TermionBackend};
+use tui::widgets::{Block, Borders, ListItem, List, Paragraph};
+use tui::layout::{Layout, Constraint, Direction, Alignment};
 use termion::event::Key;
 use termion::input::TermRead;
-use std::io::{stdin, stdout, Write};
+use std::io::{stdin, stdout};
 use std::sync::mpsc;
 use tui::text::{Span, Spans};
 use tui::style::{Style, Modifier, Color};
@@ -32,20 +32,27 @@ struct TodoItem {
     completed: char
 }
 
+enum AppStage {
+    Default,
+    CreateNewItem
+}
+
 impl TodoItem {
     fn new(name: String) -> TodoItem {
         TodoItem { name, completed: ' ' }
     }
 }
 
-struct TodoList {
+struct App {
     list: StatefulList<TodoItem>,
+    stage: AppStage
 }
 
-impl TodoList {
-    fn new(items: Vec<TodoItem>) -> TodoList {
-        TodoList {
-            list: StatefulList::with_items(items),
+impl App {
+    fn new(items: Vec<TodoItem>) -> App {
+        App {
+            list: StatefulList::new(items),
+            stage: AppStage::Default
         }
     }
 
@@ -75,16 +82,9 @@ impl TodoList {
         }
     }
 
-    fn get_task(&mut self, index: usize) -> &TodoItem {
-        &self.list.items[index]
+    fn set_stage(&mut self, stage: AppStage) {
+        self.stage = stage;
     }
-}
-
-enum Command {
-    List,
-    Add(String),
-    Tick(usize),
-    Remove(usize)
 }
 
 fn dump(path_to_file: String, data: Data) {
@@ -97,7 +97,8 @@ enum TerminalEvent {
     Next,
     Previous,
     Delete,
-    Tick
+    Tick,
+    StageChange(AppStage)
 }
 
 fn main() -> Result<(), io::Error> {
@@ -107,7 +108,7 @@ fn main() -> Result<(), io::Error> {
     let mut terminal = Terminal::new(backend)?;
 
     // Application state
-    let mut todo_list = get_todo_list();
+    let mut app = get_app_data();
 
     // Clean screen
     terminal.clear();
@@ -128,6 +129,9 @@ fn main() -> Result<(), io::Error> {
                 Key::Up => tx.send(TerminalEvent::Previous).unwrap(),
                 Key::Char('\n') => tx.send(TerminalEvent::Tick).unwrap(),
                 Key::Char(' ') => tx.send(TerminalEvent::Tick).unwrap(),
+
+                Key::Char('n') => tx.send(TerminalEvent::StageChange(AppStage::CreateNewItem)).unwrap(),
+                Key::Esc => tx.send(TerminalEvent::StageChange(AppStage::Default)).unwrap(),
                 key => println!("{:?}", key),
             }
         }
@@ -138,17 +142,21 @@ fn main() -> Result<(), io::Error> {
             // Create two chunks with equal horizontal screen space
             let chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                .constraints([
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(10)
+                ].as_ref())
                 .split(frame.size());
 
             // Iterate through all elements in the `items` app and append some debug text to it.
-            let items: Vec<ListItem> = todo_list
+            let items: Vec<ListItem> = app
                 .list
                 .items
                 .iter()
                 .enumerate()
                 .map(|(index, item)| {
-                    let mut lines = vec![Spans::from(
+                    let lines = vec![Spans::from(
                         Span::from(
                             format!("{}. [{}] - {}", index + 1, item.completed, item.name.clone())
                         )
@@ -168,28 +176,60 @@ fn main() -> Result<(), io::Error> {
                 .highlight_symbol(">> ");
 
             // We can now render the item list
-            frame.render_stateful_widget(items, chunks[0], &mut todo_list.list.state);
+            frame.render_stateful_widget(items, chunks[0], &mut app.list.state);
+
+            let create_block = |title| {
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+            };
+
+            // Add input block
+            match app.stage {
+                AppStage::CreateNewItem => {
+                    let input_block = Paragraph::new("")
+                        .block(create_block("New todo item"))
+                        .alignment(Alignment::Left);
+
+                    frame.render_widget(input_block, chunks[1]);
+                },
+                _ => ()
+            }
+
+            // Debug application state
+
+            let paragraph = Paragraph::new(
+                format!("{}", match app.stage {
+                    AppStage::CreateNewItem => "new item",
+                    AppStage::Default => "default"
+                })
+            )
+                .block(create_block("App stage"))
+                .alignment(Alignment::Left);
+
+            frame.render_widget(paragraph, chunks[2]);
         });
 
         match rx.recv().unwrap() {
             TerminalEvent::Quit => {
                 terminal.clear();
-                dump(PATH_TO_FILE.to_string(), Data {items: todo_list.list.items});
+                dump(PATH_TO_FILE.to_string(), Data {items: app.list.items});
                 break Result::Ok(())
             },
-            TerminalEvent::Next => todo_list.list.next(),
-            TerminalEvent::Previous => todo_list.list.previous(),
-            TerminalEvent::Delete => todo_list.remove_task(),
-            TerminalEvent::Tick => todo_list.toggle_task(),
+            TerminalEvent::Next => app.list.next(),
+            TerminalEvent::Previous => app.list.previous(),
+            TerminalEvent::Delete => app.remove_task(),
+            TerminalEvent::Tick => app.toggle_task(),
+            TerminalEvent::StageChange(stage) => app.set_stage(stage),
         }
     }
 }
 
-fn get_todo_list() -> TodoList {
+fn get_app_data() -> App {
     let file = fs::read_to_string(PATH_TO_FILE).expect("Unable to read file");
     let data: Data = serde_json::from_str(file.as_str()).expect("Parsing json has failed");
 
-    let mut todo_list = TodoList::new(data.items);
+    let mut app = App::new(data.items);
 
-    todo_list
+    app
 }
