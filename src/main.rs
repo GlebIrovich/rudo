@@ -4,8 +4,9 @@ use crate::utils::StatefulList;
 
 use serde::{Deserialize, Serialize};
 use std::io;
-use std::io::{stdin, stdout};
+use std::io::{stdin, stdout, Error};
 use std::sync::mpsc;
+use std::sync::mpsc::Sender;
 use std::{fs, thread};
 use termion::event::Key;
 use termion::input::TermRead;
@@ -95,11 +96,7 @@ fn dump(path_to_file: String, data: Data) {
 
 enum TerminalEvent {
     Quit,
-    Next,
-    Previous,
-    Delete,
-    Tick,
-    StageChange(AppStage),
+    Input(Key),
 }
 
 fn main() -> Result<(), io::Error> {
@@ -118,26 +115,13 @@ fn main() -> Result<(), io::Error> {
 
     thread::spawn(move || {
         //detecting keydown events
-        for c in stdin.keys() {
-            match c.unwrap() {
-                Key::Char('h') => println!("Hello world!"),
+        for event in stdin.keys() {
+            match event.unwrap() {
                 Key::Char('q') => {
                     tx.send(TerminalEvent::Quit).unwrap();
                     break;
                 }
-                Key::Char('d') => tx.send(TerminalEvent::Delete).unwrap(),
-                Key::Down => tx.send(TerminalEvent::Next).unwrap(),
-                Key::Up => tx.send(TerminalEvent::Previous).unwrap(),
-                Key::Char('\n') => tx.send(TerminalEvent::Tick).unwrap(),
-                Key::Char(' ') => tx.send(TerminalEvent::Tick).unwrap(),
-
-                Key::Char('n') => tx
-                    .send(TerminalEvent::StageChange(AppStage::CreateNewItem))
-                    .unwrap(),
-                Key::Esc => tx
-                    .send(TerminalEvent::StageChange(AppStage::Default))
-                    .unwrap(),
-                key => println!("{:?}", key),
+                key => tx.send(TerminalEvent::Input(key)).unwrap(),
             }
         }
     });
@@ -216,6 +200,13 @@ fn main() -> Result<(), io::Error> {
             frame.render_widget(paragraph, chunks[2]);
         });
 
+        // let special_event_handling = |letter: char, handling: fn()| {
+        //     match app.stage {
+        //         AppStage::CreateNewItem => tx.send(TerminalEvent::Input(letter)).unwrap(),
+        //         _ => handling()
+        //     }
+        //
+        // };
         match rx.recv().unwrap() {
             TerminalEvent::Quit => {
                 terminal.clear();
@@ -227,11 +218,15 @@ fn main() -> Result<(), io::Error> {
                 );
                 break Result::Ok(());
             }
-            TerminalEvent::Next => app.list.next(),
-            TerminalEvent::Previous => app.list.previous(),
-            TerminalEvent::Delete => app.remove_task(),
-            TerminalEvent::Tick => app.toggle_task(),
-            TerminalEvent::StageChange(stage) => app.set_stage(stage),
+            TerminalEvent::Input(Key::Char('d')) => app.remove_task(),
+            TerminalEvent::Input(Key::Down) => app.list.next(),
+            TerminalEvent::Input(Key::Up) => app.list.previous(),
+            TerminalEvent::Input(Key::Char('\n')) => app.toggle_task(),
+            TerminalEvent::Input(Key::Char(' ')) => app.toggle_task(),
+
+            TerminalEvent::Input(Key::Char('n')) => app.set_stage(AppStage::CreateNewItem),
+            TerminalEvent::Input(Key::Esc) => app.set_stage(AppStage::Default),
+            _ => (),
         }
     }
 }
@@ -244,3 +239,26 @@ fn get_app_data() -> App {
 
     app
 }
+
+// fn handle_default_keys(event: Result<Key, Error>, sender: Sender<TerminalEvent>) {
+//     //detecting keydown events
+//     match event.unwrap() {
+//         Key::Char('h') => println!("Hello world!"),
+//         Key::Char('q') => {
+//             tx.send(TerminalEvent::Quit).unwrap();
+//         }
+//         Key::Char('d') => sender.send(TerminalEvent::Delete).unwrap(),
+//         Key::Down => sender.send(TerminalEvent::Next).unwrap(),
+//         Key::Up => sender.send(TerminalEvent::Previous).unwrap(),
+//         Key::Char('\n') => sender.send(TerminalEvent::Tick).unwrap(),
+//         Key::Char(' ') => sender.send(TerminalEvent::Tick).unwrap(),
+//
+//         Key::Char('n') => sender
+//             .send(TerminalEvent::StageChange(AppStage::CreateNewItem))
+//             .unwrap(),
+//         Key::Esc => sender
+//             .send(TerminalEvent::StageChange(AppStage::Default))
+//             .unwrap(),
+//         key => println!("{:?}", key),
+//     }
+// }
