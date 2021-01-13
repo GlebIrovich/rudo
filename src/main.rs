@@ -25,7 +25,7 @@ struct Data {
     items: Vec<TodoItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct TodoItem {
     name: String,
     completed: char,
@@ -37,9 +37,9 @@ enum AppStage {
 }
 
 impl TodoItem {
-    fn new(name: String) -> TodoItem {
+    fn new(name: &str) -> TodoItem {
         TodoItem {
-            name,
+            name: String::from(name),
             completed: ' ',
         }
     }
@@ -48,6 +48,7 @@ impl TodoItem {
 struct App {
     list: StatefulList<TodoItem>,
     stage: AppStage,
+    new_item: TodoItem,
 }
 
 impl App {
@@ -55,11 +56,12 @@ impl App {
         App {
             list: StatefulList::new(items),
             stage: AppStage::Default,
+            new_item: TodoItem::new(""),
         }
     }
 
-    fn add(&mut self, item: TodoItem) {
-        self.list.items.push(item)
+    fn add_new_item(&mut self) {
+        self.list.items.push(self.new_item.clone())
     }
 
     fn toggle_task(&mut self) {
@@ -79,6 +81,9 @@ impl App {
         match self.list.state.selected() {
             Some(index) => {
                 self.list.items.remove(index);
+                if self.list.items.len() == 0 {
+                    self.list.state.select(Some(0))
+                }
             }
             _ => (),
         }
@@ -86,6 +91,19 @@ impl App {
 
     fn set_stage(&mut self, stage: AppStage) {
         self.stage = stage;
+        self.reset_new_item();
+    }
+
+    fn new_item_add_character(&mut self, letter: char) {
+        self.new_item.name = format!("{}{}", self.new_item.name, letter);
+    }
+
+    fn new_item_remove_character(&mut self) {
+        self.new_item.name.pop();
+    }
+
+    fn reset_new_item(&mut self) {
+        self.new_item = TodoItem::new("")
     }
 }
 
@@ -190,8 +208,8 @@ fn main() -> Result<(), io::Error> {
             let paragraph = Paragraph::new(format!(
                 "{}",
                 match app.stage {
-                    AppStage::CreateNewItem => "new item",
-                    AppStage::Default => "default",
+                    AppStage::CreateNewItem => format!("new item: {}", app.new_item.name),
+                    AppStage::Default => "default".to_string(),
                 }
             ))
             .block(create_block("App stage"))
@@ -200,13 +218,6 @@ fn main() -> Result<(), io::Error> {
             frame.render_widget(paragraph, chunks[2]);
         });
 
-        // let special_event_handling = |letter: char, handling: fn()| {
-        //     match app.stage {
-        //         AppStage::CreateNewItem => tx.send(TerminalEvent::Input(letter)).unwrap(),
-        //         _ => handling()
-        //     }
-        //
-        // };
         match rx.recv().unwrap() {
             TerminalEvent::Quit => {
                 terminal.clear();
@@ -218,14 +229,35 @@ fn main() -> Result<(), io::Error> {
                 );
                 break Result::Ok(());
             }
-            TerminalEvent::Input(Key::Char('d')) => app.remove_task(),
+            TerminalEvent::Input(Key::Char('d')) => match app.stage {
+                AppStage::CreateNewItem => app.new_item_add_character('d'),
+                _ => app.remove_task(),
+            },
+            TerminalEvent::Input(Key::Backspace) => match app.stage {
+                AppStage::CreateNewItem => app.new_item_remove_character(),
+                _ => (),
+            },
             TerminalEvent::Input(Key::Down) => app.list.next(),
             TerminalEvent::Input(Key::Up) => app.list.previous(),
-            TerminalEvent::Input(Key::Char('\n')) => app.toggle_task(),
-            TerminalEvent::Input(Key::Char(' ')) => app.toggle_task(),
+            TerminalEvent::Input(Key::Char('\n')) => match app.stage {
+                AppStage::CreateNewItem => {
+                    app.add_new_item();
+                    app.set_stage(AppStage::Default);
+                }
+                _ => app.toggle_task(),
+            },
+            TerminalEvent::Input(Key::Char(' ')) => match app.stage {
+                AppStage::CreateNewItem => app.new_item_add_character(' '),
+                _ => app.toggle_task(),
+            },
 
-            TerminalEvent::Input(Key::Char('n')) => app.set_stage(AppStage::CreateNewItem),
+            TerminalEvent::Input(Key::Char('n')) => match app.stage {
+                AppStage::CreateNewItem => app.new_item_add_character('n'),
+                _ => app.set_stage(AppStage::CreateNewItem),
+            },
+
             TerminalEvent::Input(Key::Esc) => app.set_stage(AppStage::Default),
+            TerminalEvent::Input(Key::Char(letter)) => app.new_item_add_character(letter),
             _ => (),
         }
     }
