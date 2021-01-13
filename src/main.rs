@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::io;
 use std::io::{stdin, stdout, Error};
 use std::sync::mpsc;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, Sender};
 use std::{fs, thread};
 use termion::event::Key;
 use termion::input::TermRead;
@@ -28,7 +28,7 @@ struct Data {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TodoItem {
     name: String,
-    completed: char,
+    completed: bool,
 }
 
 enum AppStage {
@@ -40,7 +40,7 @@ impl TodoItem {
     fn new(name: &str) -> TodoItem {
         TodoItem {
             name: String::from(name),
-            completed: ' ',
+            completed: false,
         }
     }
 }
@@ -60,19 +60,13 @@ impl App {
         }
     }
 
-    fn add_new_item(&mut self) {
-        self.list.items.push(self.new_item.clone())
+    fn add_new_item(&mut self, item: TodoItem) {
+        self.list.items.push(item)
     }
 
     fn toggle_task(&mut self) {
         match self.list.state.selected() {
-            Some(index) => {
-                if self.list.items[index].completed == ' ' {
-                    self.list.items[index].completed = 'X';
-                } else {
-                    self.list.items[index].completed = ' ';
-                }
-            }
+            Some(index) => self.list.items[index].completed = !self.list.items[index].completed,
             _ => (),
         }
     }
@@ -118,31 +112,17 @@ enum TerminalEvent {
 }
 
 fn main() -> Result<(), io::Error> {
-    let stdin = stdin();
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     // Application state
-    let mut app = get_app_data();
+    let mut app = App::new(get_app_data());
 
     // Clean screen
     terminal.clear();
 
-    let (tx, rx) = mpsc::channel();
-
-    thread::spawn(move || {
-        //detecting keydown events
-        for event in stdin.keys() {
-            match event.unwrap() {
-                Key::Char('q') => {
-                    tx.send(TerminalEvent::Quit).unwrap();
-                    break;
-                }
-                key => tx.send(TerminalEvent::Input(key)).unwrap(),
-            }
-        }
-    });
+    let terminal_listener = spawn_key_event_listener_worker();
 
     loop {
         terminal.draw(|frame| {
@@ -169,7 +149,7 @@ fn main() -> Result<(), io::Error> {
                     let lines = vec![Spans::from(Span::from(format!(
                         "{}. [{}] - {}",
                         index + 1,
-                        item.completed,
+                        if item.completed { 'X' } else { ' ' },
                         item.name.clone()
                     )))];
                     ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
@@ -194,7 +174,7 @@ fn main() -> Result<(), io::Error> {
             // Add input block
             match app.stage {
                 AppStage::CreateNewItem => {
-                    let input_block = Paragraph::new("")
+                    let input_block = Paragraph::new(format!("{}", app.new_item.name))
                         .block(create_block("New todo item"))
                         .alignment(Alignment::Left);
 
@@ -218,17 +198,21 @@ fn main() -> Result<(), io::Error> {
             frame.render_widget(paragraph, chunks[2]);
         });
 
-        match rx.recv().unwrap() {
-            TerminalEvent::Quit => {
-                terminal.clear();
-                dump(
-                    PATH_TO_FILE.to_string(),
-                    Data {
-                        items: app.list.items,
-                    },
-                );
-                break Result::Ok(());
-            }
+        match terminal_listener.receiver.recv().unwrap() {
+            TerminalEvent::Input(Key::Char('q')) => match app.stage {
+                AppStage::CreateNewItem => app.new_item_add_character('q'),
+                _ => {
+                    terminal.clear();
+                    terminal_listener.send(TerminalEvent::Quit);
+                    dump(
+                        PATH_TO_FILE.to_string(),
+                        Data {
+                            items: app.list.items,
+                        },
+                    );
+                    break Result::Ok(());
+                }
+            },
             TerminalEvent::Input(Key::Char('d')) => match app.stage {
                 AppStage::CreateNewItem => app.new_item_add_character('d'),
                 _ => app.remove_task(),
@@ -241,7 +225,8 @@ fn main() -> Result<(), io::Error> {
             TerminalEvent::Input(Key::Up) => app.list.previous(),
             TerminalEvent::Input(Key::Char('\n')) => match app.stage {
                 AppStage::CreateNewItem => {
-                    app.add_new_item();
+                    app.add_new_item(app.new_item.clone());
+                    app.reset_new_item();
                     app.set_stage(AppStage::Default);
                 }
                 _ => app.toggle_task(),
@@ -263,34 +248,53 @@ fn main() -> Result<(), io::Error> {
     }
 }
 
-fn get_app_data() -> App {
+struct TerminalEventListener {
+    sender: Sender<TerminalEvent>,
+    receiver: Receiver<TerminalEvent>,
+}
+
+impl TerminalEventListener {
+    fn new(
+        sender: Sender<TerminalEvent>,
+        receiver: Receiver<TerminalEvent>,
+    ) -> TerminalEventListener {
+        TerminalEventListener { sender, receiver }
+    }
+
+    fn send(&self, event: TerminalEvent) {
+        self.sender.send(event);
+    }
+}
+
+fn spawn_key_event_listener_worker() -> TerminalEventListener {
+    let stdin = stdin();
+
+    let (to_worker_sender, worker_receiver) = mpsc::channel();
+    let (to_consumer_sender, consumer_receiver) = mpsc::channel();
+
+    thread::spawn(move || {
+        //detecting keydown events
+        for event in stdin.keys() {
+            match event.unwrap() {
+                key => to_consumer_sender.send(TerminalEvent::Input(key)).unwrap(),
+            }
+
+            match worker_receiver.recv().unwrap() {
+                TerminalEvent::Quit => {
+                    println!("stop worker");
+                    break;
+                }
+                _ => (),
+            }
+        }
+    });
+
+    TerminalEventListener::new(to_worker_sender, consumer_receiver)
+}
+
+fn get_app_data() -> Vec<TodoItem> {
     let file = fs::read_to_string(PATH_TO_FILE).expect("Unable to read file");
     let data: Data = serde_json::from_str(file.as_str()).expect("Parsing json has failed");
 
-    let mut app = App::new(data.items);
-
-    app
+    data.items
 }
-
-// fn handle_default_keys(event: Result<Key, Error>, sender: Sender<TerminalEvent>) {
-//     //detecting keydown events
-//     match event.unwrap() {
-//         Key::Char('h') => println!("Hello world!"),
-//         Key::Char('q') => {
-//             tx.send(TerminalEvent::Quit).unwrap();
-//         }
-//         Key::Char('d') => sender.send(TerminalEvent::Delete).unwrap(),
-//         Key::Down => sender.send(TerminalEvent::Next).unwrap(),
-//         Key::Up => sender.send(TerminalEvent::Previous).unwrap(),
-//         Key::Char('\n') => sender.send(TerminalEvent::Tick).unwrap(),
-//         Key::Char(' ') => sender.send(TerminalEvent::Tick).unwrap(),
-//
-//         Key::Char('n') => sender
-//             .send(TerminalEvent::StageChange(AppStage::CreateNewItem))
-//             .unwrap(),
-//         Key::Esc => sender
-//             .send(TerminalEvent::StageChange(AppStage::Default))
-//             .unwrap(),
-//         key => println!("{:?}", key),
-//     }
-// }
