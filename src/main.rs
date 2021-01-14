@@ -1,6 +1,6 @@
 use std::io;
 use std::io::{stdin, stdout, Stdout};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::{fs, thread};
 
@@ -146,7 +146,10 @@ fn spawn_key_event_listener_worker(app_stage: Arc<Mutex<AppStage>>) -> Receiver<
                     AppStage::CreateNewItem => {
                         sender.send(TerminalEvent::Input(Key::Char('q'))).unwrap()
                     }
-                    _ => break,
+                    _ => {
+                        sender.send(TerminalEvent::Input(Key::Char('q'))).unwrap();
+                        break;
+                    }
                 },
                 key => sender.send(TerminalEvent::Input(key)).unwrap(),
             }
@@ -161,7 +164,22 @@ fn key_down_handler(
     app: &mut App,
     terminal: &mut Terminal<TermionBackend<RawTerminal<Stdout>>>,
 ) -> bool {
-    match receiver.recv().unwrap() {
+    match receiver.recv() {
+        Result::Ok(event) => key_action_mapper(event, app, terminal),
+        Err(_) => {
+            return true;
+        }
+    };
+
+    false
+}
+
+fn key_action_mapper(
+    event: TerminalEvent,
+    app: &mut App,
+    terminal: &mut Terminal<TermionBackend<RawTerminal<Stdout>>>,
+) -> bool {
+    match event {
         TerminalEvent::Input(Key::Char(key)) => match app.get_stage_clone() {
             AppStage::CreateNewItem => match key {
                 '\n' => {
@@ -176,13 +194,13 @@ fn key_down_handler(
                 'd' => app.remove_task(),
                 ' ' | '\n' => app.toggle_task(),
                 'q' => {
-                    terminal.clear().expect("Terminal clean failed");
-                    // dump(
-                    //     PATH_TO_FILE.to_string(),
-                    //     Data {
-                    //         items: &app.list.items,
-                    //     },
-                    // );
+                    terminal.clear().unwrap();
+                    dump(
+                        PATH_TO_FILE.to_string(),
+                        Data {
+                            items: app.list.items.clone(),
+                        },
+                    );
                     return true;
                 }
                 _ => (),

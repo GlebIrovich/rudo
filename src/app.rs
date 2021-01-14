@@ -31,11 +31,14 @@ pub struct App {
 
 impl App {
     pub fn new(items: Vec<TodoItem>) -> App {
-        App {
+        let mut app = App {
             list: StatefulList::new(items),
             stage: Arc::new(Mutex::new(AppStage::Default)),
             new_item: TodoItem::new(""),
-        }
+        };
+
+        app.list.next();
+        app
     }
 
     pub fn add_new_item(&mut self, item: TodoItem) {
@@ -54,7 +57,7 @@ impl App {
             Some(index) => {
                 self.list.items.remove(index);
                 if self.list.items.len() == 0 {
-                    self.list.state.select(Some(0))
+                    self.list.state.select(None)
                 }
             }
             _ => (),
