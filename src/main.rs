@@ -1,13 +1,10 @@
-mod utils;
-
-use crate::utils::StatefulList;
+use std::io;
+use std::io::{stdin, stdout};
+use std::sync::mpsc::Receiver;
+use std::sync::{mpsc, Arc, Mutex};
+use std::{fs, thread};
 
 use serde::{Deserialize, Serialize};
-use std::io;
-use std::io::{stdin, stdout, Error};
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
-use std::{fs, thread};
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
@@ -17,6 +14,10 @@ use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Terminal;
+
+use crate::utils::StatefulList;
+
+mod utils;
 
 const PATH_TO_FILE: &str = "./src/todos.json";
 
@@ -31,6 +32,7 @@ struct TodoItem {
     completed: bool,
 }
 
+#[derive(Copy, Clone)]
 enum AppStage {
     Default,
     CreateNewItem,
@@ -47,7 +49,7 @@ impl TodoItem {
 
 struct App {
     list: StatefulList<TodoItem>,
-    stage: AppStage,
+    stage: Arc<Mutex<AppStage>>,
     new_item: TodoItem,
 }
 
@@ -55,7 +57,7 @@ impl App {
     fn new(items: Vec<TodoItem>) -> App {
         App {
             list: StatefulList::new(items),
-            stage: AppStage::Default,
+            stage: Arc::new(Mutex::new(AppStage::Default)),
             new_item: TodoItem::new(""),
         }
     }
@@ -84,7 +86,7 @@ impl App {
     }
 
     fn set_stage(&mut self, stage: AppStage) {
-        self.stage = stage;
+        *self.stage.lock().unwrap() = stage;
         self.reset_new_item();
     }
 
@@ -99,6 +101,11 @@ impl App {
     fn reset_new_item(&mut self) {
         self.new_item = TodoItem::new("")
     }
+
+    fn get_stage_clone(&self) -> AppStage {
+        let stage = *self.stage.clone().lock().unwrap();
+        stage
+    }
 }
 
 fn dump(path_to_file: String, data: Data) {
@@ -107,7 +114,6 @@ fn dump(path_to_file: String, data: Data) {
 }
 
 enum TerminalEvent {
-    Quit,
     Input(Key),
 }
 
@@ -120,90 +126,92 @@ fn main() -> Result<(), io::Error> {
     let mut app = App::new(get_app_data());
 
     // Clean screen
-    terminal.clear();
+    terminal.clear().expect("Terminal clean failed");
 
-    let terminal_listener = spawn_key_event_listener_worker();
+    let key_events_receiver = spawn_key_event_listener_worker(Arc::clone(&app.stage));
 
     loop {
-        terminal.draw(|frame| {
-            // Create two chunks with equal horizontal screen space
-            let chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints(
-                    [
-                        Constraint::Percentage(50),
-                        Constraint::Percentage(40),
-                        Constraint::Percentage(10),
-                    ]
-                    .as_ref(),
-                )
-                .split(frame.size());
+        terminal
+            .draw(|frame| {
+                // Create two chunks with equal horizontal screen space
+                let chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints(
+                        [
+                            Constraint::Percentage(50),
+                            Constraint::Percentage(40),
+                            Constraint::Percentage(10),
+                        ]
+                        .as_ref(),
+                    )
+                    .split(frame.size());
 
-            // Iterate through all elements in the `items` app and append some debug text to it.
-            let items: Vec<ListItem> = app
-                .list
-                .items
-                .iter()
-                .enumerate()
-                .map(|(index, item)| {
-                    let lines = vec![Spans::from(Span::from(format!(
-                        "{}. [{}] - {}",
-                        index + 1,
-                        if item.completed { 'X' } else { ' ' },
-                        item.name.clone()
-                    )))];
-                    ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
-                })
-                .collect();
+                // Iterate through all elements in the `items` app and append some debug text to it.
+                let items: Vec<ListItem> = app
+                    .list
+                    .items
+                    .iter()
+                    .enumerate()
+                    .map(|(index, item)| {
+                        let lines = vec![Spans::from(Span::from(format!(
+                            "{}. [{}] - {}",
+                            index + 1,
+                            if item.completed { 'X' } else { ' ' },
+                            item.name.clone()
+                        )))];
+                        ListItem::new(lines)
+                            .style(Style::default().fg(Color::Black).bg(Color::White))
+                    })
+                    .collect();
 
-            // Create a List from all list items and highlight the currently selected one
-            let items = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("Todo"))
-                .highlight_style(
-                    Style::default()
-                        .bg(Color::LightGreen)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .highlight_symbol(">> ");
+                // Create a List from all list items and highlight the currently selected one
+                let items = List::new(items)
+                    .block(Block::default().borders(Borders::ALL).title("Todo"))
+                    .highlight_style(
+                        Style::default()
+                            .bg(Color::LightGreen)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .highlight_symbol(">> ");
 
-            // We can now render the item list
-            frame.render_stateful_widget(items, chunks[0], &mut app.list.state);
+                // We can now render the item list
+                frame.render_stateful_widget(items, chunks[0], &mut app.list.state);
 
-            let create_block = |title| Block::default().borders(Borders::ALL).title(title);
+                let create_block = |title| Block::default().borders(Borders::ALL).title(title);
 
-            // Add input block
-            match app.stage {
-                AppStage::CreateNewItem => {
-                    let input_block = Paragraph::new(format!("{}", app.new_item.name))
-                        .block(create_block("New todo item"))
-                        .alignment(Alignment::Left);
+                // Add input block
+                match *app.stage.lock().unwrap() {
+                    AppStage::CreateNewItem => {
+                        let input_block = Paragraph::new(format!("{}", app.new_item.name))
+                            .block(create_block("New todo item"))
+                            .alignment(Alignment::Left);
 
-                    frame.render_widget(input_block, chunks[1]);
+                        frame.render_widget(input_block, chunks[1]);
+                    }
+                    _ => (),
                 }
-                _ => (),
-            }
 
-            // Debug application state
+                // Debug application state
 
-            let paragraph = Paragraph::new(format!(
-                "{}",
-                match app.stage {
-                    AppStage::CreateNewItem => format!("new item: {}", app.new_item.name),
-                    AppStage::Default => "default".to_string(),
-                }
-            ))
-            .block(create_block("App stage"))
-            .alignment(Alignment::Left);
+                let paragraph = Paragraph::new(format!(
+                    "{}",
+                    match *app.stage.lock().unwrap() {
+                        AppStage::CreateNewItem => format!("new item: {}", app.new_item.name),
+                        AppStage::Default => "default".to_string(),
+                    }
+                ))
+                .block(create_block("App stage"))
+                .alignment(Alignment::Left);
 
-            frame.render_widget(paragraph, chunks[2]);
-        });
+                frame.render_widget(paragraph, chunks[2]);
+            })
+            .expect("Terminal draw failed");
 
-        match terminal_listener.receiver.recv().unwrap() {
-            TerminalEvent::Input(Key::Char('q')) => match app.stage {
+        match key_events_receiver.recv().unwrap() {
+            TerminalEvent::Input(Key::Char('q')) => match app.get_stage_clone() {
                 AppStage::CreateNewItem => app.new_item_add_character('q'),
                 _ => {
-                    terminal.clear();
-                    terminal_listener.send(TerminalEvent::Quit);
+                    terminal.clear().expect("Terminal clean failed");
                     dump(
                         PATH_TO_FILE.to_string(),
                         Data {
@@ -213,17 +221,17 @@ fn main() -> Result<(), io::Error> {
                     break Result::Ok(());
                 }
             },
-            TerminalEvent::Input(Key::Char('d')) => match app.stage {
+            TerminalEvent::Input(Key::Char('d')) => match app.get_stage_clone() {
                 AppStage::CreateNewItem => app.new_item_add_character('d'),
                 _ => app.remove_task(),
             },
-            TerminalEvent::Input(Key::Backspace) => match app.stage {
+            TerminalEvent::Input(Key::Backspace) => match app.get_stage_clone() {
                 AppStage::CreateNewItem => app.new_item_remove_character(),
                 _ => (),
             },
             TerminalEvent::Input(Key::Down) => app.list.next(),
             TerminalEvent::Input(Key::Up) => app.list.previous(),
-            TerminalEvent::Input(Key::Char('\n')) => match app.stage {
+            TerminalEvent::Input(Key::Char('\n')) => match app.get_stage_clone() {
                 AppStage::CreateNewItem => {
                     app.add_new_item(app.new_item.clone());
                     app.reset_new_item();
@@ -231,12 +239,12 @@ fn main() -> Result<(), io::Error> {
                 }
                 _ => app.toggle_task(),
             },
-            TerminalEvent::Input(Key::Char(' ')) => match app.stage {
+            TerminalEvent::Input(Key::Char(' ')) => match app.get_stage_clone() {
                 AppStage::CreateNewItem => app.new_item_add_character(' '),
                 _ => app.toggle_task(),
             },
 
-            TerminalEvent::Input(Key::Char('n')) => match app.stage {
+            TerminalEvent::Input(Key::Char('n')) => match app.get_stage_clone() {
                 AppStage::CreateNewItem => app.new_item_add_character('n'),
                 _ => app.set_stage(AppStage::CreateNewItem),
             },
@@ -244,52 +252,31 @@ fn main() -> Result<(), io::Error> {
             TerminalEvent::Input(Key::Esc) => app.set_stage(AppStage::Default),
             TerminalEvent::Input(Key::Char(letter)) => app.new_item_add_character(letter),
             _ => (),
-        }
+        };
     }
 }
 
-struct TerminalEventListener {
-    sender: Sender<TerminalEvent>,
-    receiver: Receiver<TerminalEvent>,
-}
-
-impl TerminalEventListener {
-    fn new(
-        sender: Sender<TerminalEvent>,
-        receiver: Receiver<TerminalEvent>,
-    ) -> TerminalEventListener {
-        TerminalEventListener { sender, receiver }
-    }
-
-    fn send(&self, event: TerminalEvent) {
-        self.sender.send(event);
-    }
-}
-
-fn spawn_key_event_listener_worker() -> TerminalEventListener {
+fn spawn_key_event_listener_worker(app_stage: Arc<Mutex<AppStage>>) -> Receiver<TerminalEvent> {
     let stdin = stdin();
 
-    let (to_worker_sender, worker_receiver) = mpsc::channel();
-    let (to_consumer_sender, consumer_receiver) = mpsc::channel();
+    let (sender, receiver) = mpsc::channel();
 
     thread::spawn(move || {
         //detecting keydown events
         for event in stdin.keys() {
             match event.unwrap() {
-                key => to_consumer_sender.send(TerminalEvent::Input(key)).unwrap(),
-            }
-
-            match worker_receiver.recv().unwrap() {
-                TerminalEvent::Quit => {
-                    println!("stop worker");
-                    break;
-                }
-                _ => (),
+                Key::Char('q') => match *app_stage.lock().unwrap() {
+                    AppStage::CreateNewItem => {
+                        sender.send(TerminalEvent::Input(Key::Char('q'))).unwrap()
+                    }
+                    _ => break,
+                },
+                key => sender.send(TerminalEvent::Input(key)).unwrap(),
             }
         }
     });
 
-    TerminalEventListener::new(to_worker_sender, consumer_receiver)
+    receiver
 }
 
 fn get_app_data() -> Vec<TodoItem> {
