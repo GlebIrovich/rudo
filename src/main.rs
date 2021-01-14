@@ -1,5 +1,5 @@
 use std::io;
-use std::io::{stdin, stdout};
+use std::io::{stdin, stdout, Stdout};
 use std::sync::mpsc::Receiver;
 use std::sync::{mpsc, Arc, Mutex};
 use std::{fs, thread};
@@ -7,7 +7,7 @@ use std::{fs, thread};
 use serde::{Deserialize, Serialize};
 use termion::event::Key;
 use termion::input::TermRead;
-use termion::raw::IntoRawMode;
+use termion::raw::{IntoRawMode, RawTerminal};
 use tui::backend::TermionBackend;
 use tui::layout::{Alignment, Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
@@ -15,8 +15,9 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Terminal;
 
-use crate::utils::StatefulList;
+use crate::app::{App, AppStage, TodoItem};
 
+mod app;
 mod utils;
 
 const PATH_TO_FILE: &str = "./src/todos.json";
@@ -24,88 +25,6 @@ const PATH_TO_FILE: &str = "./src/todos.json";
 #[derive(Debug, Serialize, Deserialize)]
 struct Data {
     items: Vec<TodoItem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TodoItem {
-    name: String,
-    completed: bool,
-}
-
-#[derive(Copy, Clone)]
-enum AppStage {
-    Default,
-    CreateNewItem,
-}
-
-impl TodoItem {
-    fn new(name: &str) -> TodoItem {
-        TodoItem {
-            name: String::from(name),
-            completed: false,
-        }
-    }
-}
-
-struct App {
-    list: StatefulList<TodoItem>,
-    stage: Arc<Mutex<AppStage>>,
-    new_item: TodoItem,
-}
-
-impl App {
-    fn new(items: Vec<TodoItem>) -> App {
-        App {
-            list: StatefulList::new(items),
-            stage: Arc::new(Mutex::new(AppStage::Default)),
-            new_item: TodoItem::new(""),
-        }
-    }
-
-    fn add_new_item(&mut self, item: TodoItem) {
-        self.list.items.push(item)
-    }
-
-    fn toggle_task(&mut self) {
-        match self.list.state.selected() {
-            Some(index) => self.list.items[index].completed = !self.list.items[index].completed,
-            _ => (),
-        }
-    }
-
-    fn remove_task(&mut self) {
-        match self.list.state.selected() {
-            Some(index) => {
-                self.list.items.remove(index);
-                if self.list.items.len() == 0 {
-                    self.list.state.select(Some(0))
-                }
-            }
-            _ => (),
-        }
-    }
-
-    fn set_stage(&mut self, stage: AppStage) {
-        *self.stage.lock().unwrap() = stage;
-        self.reset_new_item();
-    }
-
-    fn new_item_add_character(&mut self, letter: char) {
-        self.new_item.name = format!("{}{}", self.new_item.name, letter);
-    }
-
-    fn new_item_remove_character(&mut self) {
-        self.new_item.name.pop();
-    }
-
-    fn reset_new_item(&mut self) {
-        self.new_item = TodoItem::new("")
-    }
-
-    fn get_stage_clone(&self) -> AppStage {
-        let stage = *self.stage.clone().lock().unwrap();
-        stage
-    }
 }
 
 fn dump(path_to_file: String, data: Data) {
@@ -180,7 +99,7 @@ fn main() -> Result<(), io::Error> {
                 let create_block = |title| Block::default().borders(Borders::ALL).title(title);
 
                 // Add input block
-                match *app.stage.lock().unwrap() {
+                match app.get_stage_clone() {
                     AppStage::CreateNewItem => {
                         let input_block = Paragraph::new(format!("{}", app.new_item.name))
                             .block(create_block("New todo item"))
@@ -207,50 +126,8 @@ fn main() -> Result<(), io::Error> {
             })
             .expect("Terminal draw failed");
 
-        match key_events_receiver.recv().unwrap() {
-            TerminalEvent::Input(Key::Char('q')) => match app.get_stage_clone() {
-                AppStage::CreateNewItem => app.new_item_add_character('q'),
-                _ => {
-                    terminal.clear().expect("Terminal clean failed");
-                    dump(
-                        PATH_TO_FILE.to_string(),
-                        Data {
-                            items: app.list.items,
-                        },
-                    );
-                    break Result::Ok(());
-                }
-            },
-            TerminalEvent::Input(Key::Char('d')) => match app.get_stage_clone() {
-                AppStage::CreateNewItem => app.new_item_add_character('d'),
-                _ => app.remove_task(),
-            },
-            TerminalEvent::Input(Key::Backspace) => match app.get_stage_clone() {
-                AppStage::CreateNewItem => app.new_item_remove_character(),
-                _ => (),
-            },
-            TerminalEvent::Input(Key::Down) => app.list.next(),
-            TerminalEvent::Input(Key::Up) => app.list.previous(),
-            TerminalEvent::Input(Key::Char('\n')) => match app.get_stage_clone() {
-                AppStage::CreateNewItem => {
-                    app.add_new_item(app.new_item.clone());
-                    app.reset_new_item();
-                    app.set_stage(AppStage::Default);
-                }
-                _ => app.toggle_task(),
-            },
-            TerminalEvent::Input(Key::Char(' ')) => match app.get_stage_clone() {
-                AppStage::CreateNewItem => app.new_item_add_character(' '),
-                _ => app.toggle_task(),
-            },
-
-            TerminalEvent::Input(Key::Char('n')) => match app.get_stage_clone() {
-                AppStage::CreateNewItem => app.new_item_add_character('n'),
-                _ => app.set_stage(AppStage::CreateNewItem),
-            },
-
-            TerminalEvent::Input(Key::Esc) => app.set_stage(AppStage::Default),
-            TerminalEvent::Input(Key::Char(letter)) => app.new_item_add_character(letter),
+        match key_down_handler(&key_events_receiver, &mut app, &mut terminal) {
+            true => break Result::Ok(()),
             _ => (),
         };
     }
@@ -277,6 +154,61 @@ fn spawn_key_event_listener_worker(app_stage: Arc<Mutex<AppStage>>) -> Receiver<
     });
 
     receiver
+}
+
+fn key_down_handler(
+    receiver: &Receiver<TerminalEvent>,
+    app: &mut App,
+    terminal: &mut Terminal<TermionBackend<RawTerminal<Stdout>>>,
+) -> bool {
+    match receiver.recv().unwrap() {
+        TerminalEvent::Input(Key::Char('q')) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => app.new_item_add_character('q'),
+            _ => {
+                terminal.clear().expect("Terminal clean failed");
+                // dump(
+                //     PATH_TO_FILE.to_string(),
+                //     Data {
+                //         items: &app.list.items,
+                //     },
+                // );
+                return true;
+            }
+        },
+        TerminalEvent::Input(Key::Char('d')) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => app.new_item_add_character('d'),
+            _ => app.remove_task(),
+        },
+        TerminalEvent::Input(Key::Backspace) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => app.new_item_remove_character(),
+            _ => (),
+        },
+        TerminalEvent::Input(Key::Down) => app.list.next(),
+        TerminalEvent::Input(Key::Up) => app.list.previous(),
+        TerminalEvent::Input(Key::Char('\n')) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => {
+                app.add_new_item(app.new_item.clone());
+                app.reset_new_item();
+                app.set_stage(AppStage::Default);
+            }
+            _ => app.toggle_task(),
+        },
+        TerminalEvent::Input(Key::Char(' ')) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => app.new_item_add_character(' '),
+            _ => app.toggle_task(),
+        },
+
+        TerminalEvent::Input(Key::Char('n')) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => app.new_item_add_character('n'),
+            _ => app.set_stage(AppStage::CreateNewItem),
+        },
+
+        TerminalEvent::Input(Key::Esc) => app.set_stage(AppStage::Default),
+        TerminalEvent::Input(Key::Char(letter)) => app.new_item_add_character(letter),
+        _ => (),
+    };
+
+    false
 }
 
 fn get_app_data() -> Vec<TodoItem> {
