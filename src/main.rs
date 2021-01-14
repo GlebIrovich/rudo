@@ -162,50 +162,44 @@ fn key_down_handler(
     terminal: &mut Terminal<TermionBackend<RawTerminal<Stdout>>>,
 ) -> bool {
     match receiver.recv().unwrap() {
-        TerminalEvent::Input(Key::Char('q')) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => app.new_item_add_character('q'),
-            _ => {
-                terminal.clear().expect("Terminal clean failed");
-                // dump(
-                //     PATH_TO_FILE.to_string(),
-                //     Data {
-                //         items: &app.list.items,
-                //     },
-                // );
-                return true;
-            }
+        TerminalEvent::Input(Key::Char(key)) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => match key {
+                '\n' => {
+                    app.add_new_item(app.new_item.clone());
+                    app.reset_new_item();
+                    app.set_stage(AppStage::Default);
+                }
+                key => app.new_item_add_character(key),
+            },
+            AppStage::Default => match key {
+                'n' => app.set_stage(AppStage::CreateNewItem),
+                'd' => app.remove_task(),
+                ' ' | '\n' => app.toggle_task(),
+                'q' => {
+                    terminal.clear().expect("Terminal clean failed");
+                    // dump(
+                    //     PATH_TO_FILE.to_string(),
+                    //     Data {
+                    //         items: &app.list.items,
+                    //     },
+                    // );
+                    return true;
+                }
+                _ => (),
+            },
         },
-        TerminalEvent::Input(Key::Char('d')) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => app.new_item_add_character('d'),
-            _ => app.remove_task(),
+        TerminalEvent::Input(special_key) => match app.get_stage_clone() {
+            AppStage::CreateNewItem => match special_key {
+                Key::Backspace => app.new_item_remove_character(),
+                _ => (),
+            },
+            AppStage::Default => match special_key {
+                Key::Backspace => app.remove_task(),
+                Key::Down => app.list.next(),
+                Key::Up => app.list.previous(),
+                _ => (),
+            },
         },
-        TerminalEvent::Input(Key::Backspace) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => app.new_item_remove_character(),
-            _ => (),
-        },
-        TerminalEvent::Input(Key::Down) => app.list.next(),
-        TerminalEvent::Input(Key::Up) => app.list.previous(),
-        TerminalEvent::Input(Key::Char('\n')) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => {
-                app.add_new_item(app.new_item.clone());
-                app.reset_new_item();
-                app.set_stage(AppStage::Default);
-            }
-            _ => app.toggle_task(),
-        },
-        TerminalEvent::Input(Key::Char(' ')) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => app.new_item_add_character(' '),
-            _ => app.toggle_task(),
-        },
-
-        TerminalEvent::Input(Key::Char('n')) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => app.new_item_add_character('n'),
-            _ => app.set_stage(AppStage::CreateNewItem),
-        },
-
-        TerminalEvent::Input(Key::Esc) => app.set_stage(AppStage::Default),
-        TerminalEvent::Input(Key::Char(letter)) => app.new_item_add_character(letter),
-        _ => (),
     };
 
     false
