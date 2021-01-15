@@ -14,30 +14,44 @@ impl<T> StatefulList<T> {
     }
 
     pub fn next(&mut self) {
+        let number_of_items = self.items.len();
         let item = match self.state.selected() {
             Some(i) => {
-                if i >= self.items.len() - 1 {
-                    0
+                if i >= number_of_items - 1 {
+                    Some(0)
                 } else {
-                    i + 1
+                    Some(i + 1)
                 }
             }
-            None => 0,
+            None => {
+                if number_of_items > 0 {
+                    Some(0)
+                } else {
+                    None
+                }
+            }
         };
-        self.state.select(Some(item));
+        self.state.select(item);
     }
 
     pub fn previous(&mut self) {
+        let number_of_items = self.items.len();
         let item = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.items.len() - 1
+                    Some(0)
                 } else {
-                    i - 1
+                    Some(i - 1)
                 }
             }
-            None => 0,
+            None => {
+                if number_of_items > 0 {
+                    Some(number_of_items - 1)
+                } else {
+                    None
+                }
+            }
         };
-        self.state.select(Some(item));
+        self.state.select(item);
     }
 }

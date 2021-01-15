@@ -37,7 +37,7 @@ impl App {
             new_item: TodoItem::new(""),
         };
 
-        app.list.next();
+        app.select_first_task_or_none();
         app
     }
 
@@ -56,9 +56,7 @@ impl App {
         match self.list.state.selected() {
             Some(index) => {
                 self.list.items.remove(index);
-                if self.list.items.len() == 0 {
-                    self.list.state.select(None)
-                }
+                self.select_first_task_or_none();
             }
             _ => (),
         }
@@ -84,5 +82,13 @@ impl App {
     pub fn get_stage_clone(&self) -> AppStage {
         let stage = *self.stage.clone().lock().unwrap();
         stage
+    }
+
+    fn select_first_task_or_none(&mut self) {
+        if self.list.items.len() > 0 {
+            self.list.state.select(Some(0));
+        } else {
+            self.list.state.select(None);
+        }
     }
 }
