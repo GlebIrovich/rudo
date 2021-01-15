@@ -1,6 +1,6 @@
 use std::io;
 use std::io::{stdin, stdout, Stdout};
-use std::sync::mpsc::{Receiver, RecvError};
+use std::sync::mpsc::Receiver;
 use std::sync::{mpsc, Arc, Mutex};
 use std::{fs, thread};
 
@@ -101,7 +101,7 @@ fn main() -> Result<(), io::Error> {
                 // Add input block
                 match app.get_stage_clone() {
                     AppStage::CreateNewItem => {
-                        let input_block = Paragraph::new(format!("{}", app.new_item.name))
+                        let input_block = Paragraph::new(format!("{}", app.new_item_name))
                             .block(create_block("New todo item"))
                             .alignment(Alignment::Left);
 
@@ -115,7 +115,7 @@ fn main() -> Result<(), io::Error> {
                 let paragraph = Paragraph::new(format!(
                     "{}",
                     match *app.stage.lock().unwrap() {
-                        AppStage::CreateNewItem => format!("new item: {}", app.new_item.name),
+                        AppStage::CreateNewItem => format!("new item: {}", app.new_item_name),
                         AppStage::Default => "default".to_string(),
                     }
                 ))
@@ -183,8 +183,8 @@ fn key_action_mapper(
         TerminalEvent::Input(Key::Char(key)) => match app.get_stage_clone() {
             AppStage::CreateNewItem => match key {
                 '\n' => {
-                    app.add_new_item(app.new_item.clone());
-                    app.reset_new_item();
+                    app.add_new_item();
+                    app.reset_new_item_name();
                     app.set_stage(AppStage::Default);
                 }
                 key => app.new_item_add_character(key),
