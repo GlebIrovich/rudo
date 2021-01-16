@@ -84,8 +84,10 @@ fn main() -> Result<(), io::Error> {
                     .collect();
 
                 // Create a List from all list items and highlight the currently selected one
+                let title = format!("Todo list - Sorting: {}", app.sorting_order);
+
                 let items = List::new(items)
-                    .block(Block::default().borders(Borders::ALL).title("Todo"))
+                    .block(Block::default().borders(Borders::ALL).title(title))
                     .highlight_style(
                         Style::default()
                             .bg(Color::LightGreen)
@@ -193,6 +195,7 @@ fn key_action_mapper(
                 'n' => app.set_stage(AppStage::CreateNewItem),
                 'd' => app.remove_task(),
                 ' ' | '\n' => app.toggle_task(),
+                's' => app.toggle_sorting(),
                 'q' => {
                     terminal.clear().unwrap();
                     dump(
