@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 pub enum AppStage {
     Default,
     CreateNewItem,
+    Filter,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +89,7 @@ pub struct App {
     pub list: StatefulList<TodoItem>,
     pub stage: Arc<Mutex<AppStage>>,
     pub new_item_name: String,
+    pub filter_term: String,
     pub sorting_order: SortingOrder,
 }
 
@@ -98,6 +100,7 @@ impl App {
             stage: Arc::new(Mutex::new(AppStage::Default)),
             new_item_name: String::new(),
             sorting_order: SortingOrder::Ascending,
+            filter_term: String::new(),
         };
 
         app.sort_by_date();
@@ -158,6 +161,18 @@ impl App {
 
     pub fn reset_new_item_name(&mut self) {
         self.new_item_name = String::new()
+    }
+
+    pub fn filter_term_add_character(&mut self, letter: char) {
+        self.filter_term = format!("{}{}", self.filter_term, letter);
+    }
+
+    pub fn filter_term_remove_character(&mut self) {
+        self.filter_term.pop();
+    }
+
+    pub fn reset_filter_term(&mut self) {
+        self.filter_term = String::new()
     }
 
     pub fn get_stage_clone(&self) -> AppStage {

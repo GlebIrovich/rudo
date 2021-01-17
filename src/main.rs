@@ -51,7 +51,7 @@ fn main() -> Result<(), io::Error> {
 
     loop {
         let constraint: Vec<Constraint> = match *app.stage.lock().unwrap() {
-            AppStage::Default => vec![Constraint::Percentage(100)],
+            AppStage::Default | AppStage::Filter => vec![Constraint::Percentage(100)],
             AppStage::CreateNewItem => vec![Constraint::Percentage(50), Constraint::Percentage(50)],
         };
 
@@ -68,6 +68,11 @@ fn main() -> Result<(), io::Error> {
                     .list
                     .items
                     .iter()
+                    .filter(|item| {
+                        item.name
+                            .to_lowercase()
+                            .contains(&app.filter_term.to_lowercase())
+                    })
                     .enumerate()
                     .map(|(index, item)| {
                         let lines = vec![Spans::from(Span::from(format!(
@@ -82,10 +87,18 @@ fn main() -> Result<(), io::Error> {
                     .collect();
 
                 // Create a List from all list items and highlight the currently selected one
-                let title = format!("Todo list - Sorting: {}", app.sorting_order);
+                let title = format!(
+                    "Todo list - Sorting: {} - Filter: {}",
+                    app.sorting_order,
+                    if app.filter_term == "" {
+                        "None"
+                    } else {
+                        &app.filter_term
+                    }
+                );
 
                 let border_color = match *app.stage.lock().unwrap() {
-                    AppStage::Default => Color::Green,
+                    AppStage::Default | AppStage::Filter => Color::Green,
                     AppStage::CreateNewItem => Color::Reset,
                 };
 
@@ -202,8 +215,15 @@ fn key_action_mapper(
                 }
                 key => app.new_item_add_character(key),
             },
+            AppStage::Filter => match key {
+                '\n' => {
+                    app.set_stage(AppStage::Default);
+                }
+                key => app.filter_term_add_character(key),
+            },
             AppStage::Default => match key {
                 'n' => app.set_stage(AppStage::CreateNewItem),
+                'f' => app.set_stage(AppStage::Filter),
                 'd' => app.remove_task(),
                 ' ' | '\n' => app.toggle_task(),
                 's' => app.toggle_sorting(),
@@ -223,6 +243,10 @@ fn key_action_mapper(
         TerminalEvent::Input(special_key) => match app.get_stage_clone() {
             AppStage::CreateNewItem => match special_key {
                 Key::Backspace => app.new_item_remove_character(),
+                _ => (),
+            },
+            AppStage::Filter => match special_key {
+                Key::Backspace => app.filter_term_remove_character(),
                 _ => (),
             },
             AppStage::Default => match special_key {
