@@ -16,8 +16,10 @@ use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Terminal;
 
 use crate::app::{App, AppStage, TodoItem};
+use crate::app_layout::ListLayout;
 
 mod app;
+mod app_layout;
 mod utils;
 
 const PATH_TO_FILE: &str = "./src/todos.json";
@@ -50,18 +52,9 @@ fn main() -> Result<(), io::Error> {
     let key_events_receiver = spawn_key_event_listener_worker(Arc::clone(&app.stage));
 
     loop {
-        let constraint: Vec<Constraint> = match *app.stage.lock().unwrap() {
-            AppStage::Default | AppStage::Filter => vec![Constraint::Percentage(100)],
-            AppStage::CreateNewItem => vec![Constraint::Percentage(50), Constraint::Percentage(50)],
-        };
-
         terminal
             .draw(|frame| {
                 // Create two chunks with equal horizontal screen space
-                let chunks = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints(constraint.as_ref())
-                    .split(frame.size());
 
                 // Iterate through all elements in the `items` app and append some debug text to it.
                 let items: Vec<ListItem> = app
@@ -86,69 +79,28 @@ fn main() -> Result<(), io::Error> {
                     })
                     .collect();
 
-                // Create a List from all list items and highlight the currently selected one
-                let title = format!(
-                    "Todo list - Sorting: {} - Filter: {}",
-                    app.sorting_order,
-                    if app.filter_term == "" {
-                        "None"
-                    } else {
-                        &app.filter_term
-                    }
-                );
+                let mut list_layout = ListLayout::new();
+                let frame_size = frame.size();
 
-                let border_color = match *app.stage.lock().unwrap() {
-                    AppStage::Default | AppStage::Filter => Color::Green,
-                    AppStage::CreateNewItem => Color::Reset,
-                };
+                let chunks =
+                    list_layout.update_layout_chunks(&*app.stage.lock().unwrap(), frame_size);
 
-                let items = List::new(items)
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .border_style(Style::default().fg(border_color))
-                            .title(title),
-                    )
-                    .highlight_style(
-                        Style::default()
-                            .bg(Color::LightGreen)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .highlight_symbol(">> ");
+                let list_widget = ListLayout::get_list_widget(items, list_layout.list_block);
 
-                // We can now render the item list
-                frame.render_stateful_widget(items, chunks[0], &mut app.list.state);
-
-                let create_block = |title| Block::default().borders(Borders::ALL).title(title);
+                frame.render_stateful_widget(list_widget, chunks[0], &mut app.list.state);
 
                 // Add input block
-                match app.get_stage_clone() {
+                match &*app.stage.lock().unwrap() {
                     AppStage::CreateNewItem => {
-                        let input_block = Paragraph::new(format!("{}", app.new_item_name))
-                            .block(
-                                create_block("Type new task")
-                                    .border_style(Style::default().fg(Color::Green)),
-                            )
-                            .alignment(Alignment::Left);
+                        let new_item_widget = ListLayout::get_new_item_widget(
+                            &app.new_item_name,
+                            list_layout.new_item_input_block,
+                        );
 
-                        frame.render_widget(input_block, chunks[1]);
+                        frame.render_widget(new_item_widget, chunks[1]);
                     }
                     _ => (),
                 }
-
-                // // Debug application state
-                //
-                // let paragraph = Paragraph::new(format!(
-                //     "{}",
-                //     match *app.stage.lock().unwrap() {
-                //         AppStage::CreateNewItem => format!("new item: {}", app.new_item_name),
-                //         AppStage::Default => "default".to_string(),
-                //     }
-                // ))
-                // .block(create_block("App stage"))
-                // .alignment(Alignment::Left);
-
-                // frame.render_widget(paragraph, chunks[2]);
             })
             .expect("Terminal draw failed");
 
