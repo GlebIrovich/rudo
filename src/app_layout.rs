@@ -1,7 +1,9 @@
 use crate::app::AppStage;
+use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use tui::Frame;
 
 pub struct ListLayout<'a> {
     pub layout: Layout,
@@ -51,7 +53,23 @@ impl<'a> ListLayout<'a> {
         self.layout.split(area)
     }
 
-    pub fn get_list_widget(items: Vec<ListItem<'a>>, block: Block<'a>) -> List<'a> {
+    pub fn draw_list_widget<B>(
+        &self,
+        frame: &mut Frame<B>,
+        items: Vec<ListItem<'a>>,
+        area: Rect,
+        state: &mut ListState,
+    ) where
+        B: Backend,
+    {
+        frame.render_stateful_widget(
+            self.get_list_widget(items, self.list_block.clone()),
+            area,
+            state,
+        );
+    }
+
+    fn get_list_widget(&self, items: Vec<ListItem<'a>>, block: Block<'a>) -> List<'a> {
         List::new(items)
             .highlight_style(
                 Style::default()
@@ -62,7 +80,17 @@ impl<'a> ListLayout<'a> {
             .block(block)
     }
 
-    pub fn get_new_item_widget(item_name: &str, block: Block<'a>) -> Paragraph<'a> {
+    pub fn draw_new_item_widget<B>(&self, frame: &mut Frame<B>, item_name: &str, area: Rect)
+    where
+        B: Backend,
+    {
+        frame.render_widget(
+            self.get_new_item_widget(item_name, self.new_item_input_block.clone()),
+            area,
+        );
+    }
+
+    fn get_new_item_widget(&self, item_name: &str, block: Block<'a>) -> Paragraph<'a> {
         Paragraph::new(format!("{}", item_name))
             .block(block)
             .alignment(Alignment::Left)
@@ -74,17 +102,90 @@ pub struct AppLayout<'a> {
     pub filter_block: Block<'a>,
     pub list_layout: ListLayout<'a>,
     pub info_block: Block<'a>,
-    pub help_block: Block<'a>,
+    pub help_block: Paragraph<'a>,
 }
 
 impl<'a> AppLayout<'a> {
     pub fn new() -> Self {
         Self {
-            layout: Layout::default().direction(Direction::Vertical),
+            layout: Layout::default(),
             filter_block: Block::default(),
             info_block: Block::default(),
-            help_block: Block::default(),
+            help_block: Paragraph::new(""),
             list_layout: ListLayout::new(),
         }
+    }
+
+    pub fn update_layout_chunks(&mut self, stage: &AppStage, area: Rect) -> (Vec<Rect>, Vec<Rect>) {
+        let constraint: Vec<Constraint> = match stage {
+            _ => vec![
+                Constraint::Ratio(1, 5),
+                Constraint::Ratio(3, 5),
+                Constraint::Ratio(1, 5),
+            ],
+        };
+
+        self.layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(constraint.as_ref());
+
+        let border_color = match stage {
+            AppStage::Filter => Color::Green,
+            _ => Color::Reset,
+        };
+
+        self.filter_block = Block::default()
+            .borders(Borders::ALL)
+            .title("Filter")
+            .border_style(Style::default().fg(border_color));
+
+        let help_block = Block::default().borders(Borders::ALL).title("Help");
+
+        self.help_block = match stage {
+            AppStage::Default => {
+                Paragraph::new("q - quite, s - sort, n - new task, f - filter task")
+                    .block(help_block)
+            }
+            AppStage::CreateNewItem => Paragraph::new("Enter - add item").block(help_block),
+            AppStage::Filter => Paragraph::new("Enter - apply filter").block(help_block),
+        };
+
+        let app_layout_chunks = self.layout.split(area);
+        let list_layout_chunks = match stage {
+            _ => self
+                .list_layout
+                .update_layout_chunks(stage, app_layout_chunks[1]),
+        };
+
+        (app_layout_chunks, list_layout_chunks)
+    }
+
+    pub fn draw_help_widget<B>(&self, frame: &mut Frame<B>, area: Rect)
+    where
+        B: Backend,
+    {
+        frame.render_widget(self.help_block.clone(), area);
+    }
+
+    pub fn draw_filter_widget<B>(&self, frame: &mut Frame<B>, filter_term: &str, area: Rect)
+    where
+        B: Backend,
+    {
+        frame.render_widget(
+            self.get_filter_widget(filter_term, self.filter_block.clone()),
+            area,
+        );
+    }
+
+    fn get_filter_widget(&self, filter_term: &str, block: Block<'a>) -> Paragraph<'a> {
+        let text = if filter_term == "" {
+            "None"
+        } else {
+            filter_term
+        };
+
+        Paragraph::new(format!("{}", text))
+            .block(block)
+            .alignment(Alignment::Left)
     }
 }

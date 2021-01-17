@@ -81,27 +81,34 @@ fn main() -> Result<(), io::Error> {
                 let mut app_layout = AppLayout::new();
                 let frame_size = frame.size();
 
-                let chunks = app_layout
-                    .list_layout
-                    .update_layout_chunks(&*app.stage.lock().unwrap(), frame_size);
+                let (app_chunks, list_chunks) =
+                    app_layout.update_layout_chunks(&*app.stage.lock().unwrap(), frame_size);
 
-                let list_widget =
-                    ListLayout::get_list_widget(items, app_layout.list_layout.list_block);
+                app_layout.draw_filter_widget(frame, &app.filter_term, app_chunks[0]);
+                app_layout.list_layout.draw_list_widget(
+                    frame,
+                    items,
+                    list_chunks[0],
+                    &mut app.list.state,
+                );
+                app_layout.draw_help_widget(frame, app_chunks[2]);
 
-                // Add input block
                 match &*app.stage.lock().unwrap() {
                     AppStage::CreateNewItem => {
-                        let new_item_widget = ListLayout::get_new_item_widget(
+                        // let new_item_widget = ListLayout::get_new_item_widget(
+                        //     &app.new_item_name,
+                        //     app_layout.list_layout.new_item_input_block,
+                        // );
+
+                        app_layout.list_layout.draw_new_item_widget(
+                            frame,
                             &app.new_item_name,
-                            app_layout.list_layout.new_item_input_block,
+                            list_chunks[1],
                         );
 
-                        frame.render_stateful_widget(list_widget, chunks[0], &mut app.list.state);
-                        frame.render_widget(new_item_widget, chunks[1]);
+                        // frame.render_widget(new_item_widget, list_chunks[1]);
                     }
-                    _ => {
-                        frame.render_stateful_widget(list_widget, chunks[0], &mut app.list.state);
-                    }
+                    _ => (),
                 }
             })
             .expect("Terminal draw failed");
