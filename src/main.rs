@@ -50,19 +50,17 @@ fn main() -> Result<(), io::Error> {
     let key_events_receiver = spawn_key_event_listener_worker(Arc::clone(&app.stage));
 
     loop {
+        let constraint: Vec<Constraint> = match *app.stage.lock().unwrap() {
+            AppStage::Default => vec![Constraint::Percentage(100)],
+            AppStage::CreateNewItem => vec![Constraint::Percentage(50), Constraint::Percentage(50)],
+        };
+
         terminal
             .draw(|frame| {
                 // Create two chunks with equal horizontal screen space
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints(
-                        [
-                            Constraint::Percentage(50),
-                            Constraint::Percentage(40),
-                            Constraint::Percentage(10),
-                        ]
-                        .as_ref(),
-                    )
+                    .constraints(constraint.as_ref())
                     .split(frame.size());
 
                 // Iterate through all elements in the `items` app and append some debug text to it.
@@ -86,8 +84,18 @@ fn main() -> Result<(), io::Error> {
                 // Create a List from all list items and highlight the currently selected one
                 let title = format!("Todo list - Sorting: {}", app.sorting_order);
 
+                let border_color = match *app.stage.lock().unwrap() {
+                    AppStage::Default => Color::Green,
+                    AppStage::CreateNewItem => Color::Reset,
+                };
+
                 let items = List::new(items)
-                    .block(Block::default().borders(Borders::ALL).title(title))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .border_style(Style::default().fg(border_color))
+                            .title(title),
+                    )
                     .highlight_style(
                         Style::default()
                             .bg(Color::LightGreen)
@@ -104,7 +112,10 @@ fn main() -> Result<(), io::Error> {
                 match app.get_stage_clone() {
                     AppStage::CreateNewItem => {
                         let input_block = Paragraph::new(format!("{}", app.new_item_name))
-                            .block(create_block("New todo item"))
+                            .block(
+                                create_block("Type new task")
+                                    .border_style(Style::default().fg(Color::Green)),
+                            )
                             .alignment(Alignment::Left);
 
                         frame.render_widget(input_block, chunks[1]);
@@ -112,19 +123,19 @@ fn main() -> Result<(), io::Error> {
                     _ => (),
                 }
 
-                // Debug application state
+                // // Debug application state
+                //
+                // let paragraph = Paragraph::new(format!(
+                //     "{}",
+                //     match *app.stage.lock().unwrap() {
+                //         AppStage::CreateNewItem => format!("new item: {}", app.new_item_name),
+                //         AppStage::Default => "default".to_string(),
+                //     }
+                // ))
+                // .block(create_block("App stage"))
+                // .alignment(Alignment::Left);
 
-                let paragraph = Paragraph::new(format!(
-                    "{}",
-                    match *app.stage.lock().unwrap() {
-                        AppStage::CreateNewItem => format!("new item: {}", app.new_item_name),
-                        AppStage::Default => "default".to_string(),
-                    }
-                ))
-                .block(create_block("App stage"))
-                .alignment(Alignment::Left);
-
-                frame.render_widget(paragraph, chunks[2]);
+                // frame.render_widget(paragraph, chunks[2]);
             })
             .expect("Terminal draw failed");
 
