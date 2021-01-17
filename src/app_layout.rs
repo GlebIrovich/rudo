@@ -56,6 +56,7 @@ impl<'a> ListLayout<'a> {
             .highlight_style(
                 Style::default()
                     .bg(Color::LightGreen)
+                    .fg(Color::Black)
                     .add_modifier(Modifier::BOLD),
             )
             .block(block)
@@ -68,12 +69,12 @@ impl<'a> ListLayout<'a> {
     }
 }
 
-struct AppLayout<'a> {
-    layout: Layout,
-    filter_block: Block<'a>,
-    list_layout: ListLayout<'a>,
-    info_block: Block<'a>,
-    help_block: Block<'a>,
+pub struct AppLayout<'a> {
+    pub layout: Layout,
+    pub filter_block: Block<'a>,
+    pub list_layout: ListLayout<'a>,
+    pub info_block: Block<'a>,
+    pub help_block: Block<'a>,
 }
 
 impl<'a> AppLayout<'a> {

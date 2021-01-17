@@ -16,7 +16,7 @@ use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Terminal;
 
 use crate::app::{App, AppStage, TodoItem};
-use crate::app_layout::ListLayout;
+use crate::app_layout::{AppLayout, ListLayout};
 
 mod app;
 mod app_layout;
@@ -75,31 +75,33 @@ fn main() -> Result<(), io::Error> {
                             item.name.clone()
                         )))];
                         ListItem::new(lines)
-                            .style(Style::default().fg(Color::Black).bg(Color::White))
                     })
                     .collect();
 
-                let mut list_layout = ListLayout::new();
+                let mut app_layout = AppLayout::new();
                 let frame_size = frame.size();
 
-                let chunks =
-                    list_layout.update_layout_chunks(&*app.stage.lock().unwrap(), frame_size);
+                let chunks = app_layout
+                    .list_layout
+                    .update_layout_chunks(&*app.stage.lock().unwrap(), frame_size);
 
-                let list_widget = ListLayout::get_list_widget(items, list_layout.list_block);
-
-                frame.render_stateful_widget(list_widget, chunks[0], &mut app.list.state);
+                let list_widget =
+                    ListLayout::get_list_widget(items, app_layout.list_layout.list_block);
 
                 // Add input block
                 match &*app.stage.lock().unwrap() {
                     AppStage::CreateNewItem => {
                         let new_item_widget = ListLayout::get_new_item_widget(
                             &app.new_item_name,
-                            list_layout.new_item_input_block,
+                            app_layout.list_layout.new_item_input_block,
                         );
 
+                        frame.render_stateful_widget(list_widget, chunks[0], &mut app.list.state);
                         frame.render_widget(new_item_widget, chunks[1]);
                     }
-                    _ => (),
+                    _ => {
+                        frame.render_stateful_widget(list_widget, chunks[0], &mut app.list.state);
+                    }
                 }
             })
             .expect("Terminal draw failed");
