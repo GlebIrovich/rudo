@@ -4,6 +4,8 @@ use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Result};
 use std::sync::{Arc, Mutex};
+use tui::widgets::ListItem;
+use uuid::Uuid;
 
 #[derive(Copy, Clone)]
 pub enum AppStage {
@@ -14,6 +16,7 @@ pub enum AppStage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoItem {
+    pub id: Uuid,
     pub name: String,
     pub completed: bool,
     #[serde(with = "my_date_format")]
@@ -25,6 +28,7 @@ pub struct TodoItem {
 impl TodoItem {
     fn new(name: &str) -> Self {
         TodoItem {
+            id: Uuid::new_v4(),
             name: String::from(name),
             completed: false,
             created_date: Utc::now(),
@@ -178,6 +182,18 @@ impl App {
     pub fn get_stage_clone(&self) -> AppStage {
         let stage = *self.stage.clone().lock().unwrap();
         stage
+    }
+
+    pub fn get_filtered_items(&self) -> Vec<&TodoItem> {
+        self.list
+            .items
+            .iter()
+            .filter(|item| {
+                item.name
+                    .to_lowercase()
+                    .contains(&self.filter_term.to_lowercase())
+            })
+            .collect()
     }
 
     fn sort_by_date(&mut self) {

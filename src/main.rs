@@ -58,14 +58,8 @@ fn main() -> Result<(), io::Error> {
 
                 // Iterate through all elements in the `items` app and append some debug text to it.
                 let items: Vec<ListItem> = app
-                    .list
-                    .items
+                    .get_filtered_items()
                     .iter()
-                    .filter(|item| {
-                        item.name
-                            .to_lowercase()
-                            .contains(&app.filter_term.to_lowercase())
-                    })
                     .enumerate()
                     .map(|(index, item)| {
                         let lines = vec![Spans::from(Span::from(format!(
@@ -130,7 +124,7 @@ fn spawn_key_event_listener_worker(app_stage: Arc<Mutex<AppStage>>) -> Receiver<
         for event in stdin.keys() {
             match event.unwrap() {
                 Key::Char('q') => match *app_stage.lock().unwrap() {
-                    AppStage::CreateNewItem => {
+                    AppStage::CreateNewItem | AppStage::Filter => {
                         sender.send(TerminalEvent::Input(Key::Char('q'))).unwrap()
                     }
                     _ => {
