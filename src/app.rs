@@ -91,6 +91,7 @@ mod my_date_format {
 
 pub struct App {
     pub list: StatefulList<TodoItem>,
+    pub items: Vec<TodoItem>,
     pub stage: Arc<Mutex<AppStage>>,
     pub new_item_name: String,
     pub filter_term: String,
@@ -100,6 +101,7 @@ pub struct App {
 impl App {
     pub fn new(items: Vec<TodoItem>) -> App {
         let mut app = App {
+            items: items.iter().cloned().collect(),
             list: StatefulList::new(items),
             stage: Arc::new(Mutex::new(AppStage::Default)),
             new_item_name: String::new(),
@@ -113,28 +115,31 @@ impl App {
     }
 
     pub fn add_new_item(&mut self) {
-        self.list.items.push(TodoItem::new(&self.new_item_name));
-        self.sort_by_date();
+        self.items.push(TodoItem::new(&self.new_item_name));
+        self.list = StatefulList::new(self.items.iter().cloned().collect());
     }
 
     pub fn toggle_task(&mut self) {
-        match self.list.state.selected() {
+        match self.get_selected_item_index() {
+            None => {}
             Some(index) => {
-                let new_status = !self.list.items[index].completed;
-                let todo_item = &mut self.list.items[index];
+                let new_status = !self.items[index].completed;
+                let todo_item = &mut self.items[index];
                 todo_item.set_completion(new_status);
+
+                self.apply_filter();
             }
-            _ => (),
-        };
+        }
     }
 
     pub fn remove_task(&mut self) {
-        match self.list.state.selected() {
+        match self.get_selected_item_index() {
+            None => {}
             Some(index) => {
-                self.list.items.remove(index);
+                self.items.remove(index);
+                self.list = StatefulList::new(self.items.iter().cloned().collect());
                 self.select_first_task_or_none();
             }
-            _ => (),
         }
     }
 
@@ -169,19 +174,33 @@ impl App {
 
     pub fn filter_term_add_character(&mut self, letter: char) {
         self.filter_term = format!("{}{}", self.filter_term, letter);
+        self.apply_filter();
     }
 
     pub fn filter_term_remove_character(&mut self) {
         self.filter_term.pop();
-    }
-
-    pub fn reset_filter_term(&mut self) {
-        self.filter_term = String::new()
+        self.apply_filter();
     }
 
     pub fn get_stage_clone(&self) -> AppStage {
         let stage = *self.stage.clone().lock().unwrap();
         stage
+    }
+
+    pub fn apply_filter(&mut self) {
+        let items = self
+            .items
+            .iter()
+            .filter(|item| {
+                item.name
+                    .to_lowercase()
+                    .contains(&self.filter_term.to_lowercase())
+            })
+            .cloned()
+            .collect();
+
+        self.list = StatefulList::new(items);
+        self.select_first_task_or_none();
     }
 
     pub fn get_filtered_items(&self) -> Vec<&TodoItem> {
@@ -209,6 +228,16 @@ impl App {
             self.list.state.select(Some(0));
         } else {
             self.list.state.select(None);
+        }
+    }
+
+    fn get_selected_item_index(&self) -> Option<usize> {
+        match self.list.get_selected_item() {
+            Some(selected_item) => self
+                .items
+                .iter()
+                .position(|item| item.id == selected_item.id),
+            _ => None,
         }
     }
 }

@@ -54,4 +54,11 @@ impl<T> StatefulList<T> {
         };
         self.state.select(item);
     }
+
+    pub fn get_selected_item(&self) -> Option<&T> {
+        match self.state.selected() {
+            Some(index) => Some(&self.items[index]),
+            _ => None,
+        }
+    }
 }
