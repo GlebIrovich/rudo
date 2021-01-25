@@ -4,7 +4,6 @@ use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Result};
 use std::sync::{Arc, Mutex};
-use tui::widgets::ListItem;
 use uuid::Uuid;
 
 #[derive(Copy, Clone)]
@@ -34,13 +33,6 @@ impl TodoItem {
             created_date: Utc::now(),
             updated_date: Utc::now(),
         }
-    }
-
-    fn update_name(&mut self, name: &str) -> &Self {
-        self.name = String::from(name);
-        self.updated_date = Utc::now();
-
-        self
     }
 
     fn set_completion(&mut self, is_complete: bool) -> &Self {

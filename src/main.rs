@@ -9,14 +9,12 @@ use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::{IntoRawMode, RawTerminal};
 use tui::backend::TermionBackend;
-use tui::layout::{Alignment, Constraint, Direction, Layout};
-use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use tui::widgets::ListItem;
 use tui::Terminal;
 
 use crate::app::{App, AppStage, TodoItem};
-use crate::app_layout::{AppLayout, ListLayout};
+use crate::app_layout::AppLayout;
 
 mod app;
 mod app_layout;
@@ -54,9 +52,6 @@ fn main() -> Result<(), io::Error> {
     loop {
         terminal
             .draw(|frame| {
-                // Create two chunks with equal horizontal screen space
-
-                // Iterate through all elements in the `items` app and append some debug text to it.
                 let items: Vec<ListItem> = app
                     .get_filtered_items()
                     .iter()
@@ -89,18 +84,11 @@ fn main() -> Result<(), io::Error> {
 
                 match &*app.stage.lock().unwrap() {
                     AppStage::CreateNewItem => {
-                        // let new_item_widget = ListLayout::get_new_item_widget(
-                        //     &app.new_item_name,
-                        //     app_layout.list_layout.new_item_input_block,
-                        // );
-
                         app_layout.list_layout.draw_new_item_widget(
                             frame,
                             &app.new_item_name,
                             list_chunks[1],
                         );
-
-                        // frame.render_widget(new_item_widget, list_chunks[1]);
                     }
                     _ => (),
                 }

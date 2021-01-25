@@ -2,7 +2,7 @@ use crate::app::AppStage;
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use tui::Frame;
 
 pub struct ListLayout<'a> {
@@ -93,6 +93,7 @@ impl<'a> ListLayout<'a> {
     fn get_new_item_widget(&self, item_name: &str, block: Block<'a>) -> Paragraph<'a> {
         Paragraph::new(format!("{}", item_name))
             .block(block)
+            .wrap(Wrap { trim: false })
             .alignment(Alignment::Left)
     }
 }
@@ -119,9 +120,9 @@ impl<'a> AppLayout<'a> {
     pub fn update_layout_chunks(&mut self, stage: &AppStage, area: Rect) -> (Vec<Rect>, Vec<Rect>) {
         let constraint: Vec<Constraint> = match stage {
             _ => vec![
-                Constraint::Ratio(1, 5),
-                Constraint::Ratio(3, 5),
-                Constraint::Ratio(1, 5),
+                Constraint::Length(3),
+                Constraint::Min(4),
+                Constraint::Length(3),
             ],
         };
 
