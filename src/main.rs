@@ -15,19 +15,20 @@ use tui::Terminal;
 
 use crate::app::{App, AppStage, TodoItem};
 use crate::app_layout::AppLayout;
+use std::path::PathBuf;
 
 mod app;
 mod app_layout;
 mod utils;
-
-const PATH_TO_FILE: &str = "./src/todos.json";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Data {
     items: Vec<TodoItem>,
 }
 
-fn dump(path_to_file: String, data: Data) {
+fn dump(data: Data) {
+    let (_path_to_file_dir, path_to_file) = get_file_path();
+
     let content = serde_json::to_string(&data).expect("Json serialization failed");
     fs::write(path_to_file, content).expect("Data cannot be saved");
 }
@@ -172,12 +173,9 @@ fn key_action_mapper(
                 's' => app.toggle_sorting(),
                 'q' => {
                     terminal.clear().unwrap();
-                    dump(
-                        PATH_TO_FILE.to_string(),
-                        Data {
-                            items: app.list.items.clone(),
-                        },
-                    );
+                    dump(Data {
+                        items: app.list.items.clone(),
+                    });
                     return true;
                 }
                 _ => (),
@@ -205,8 +203,28 @@ fn key_action_mapper(
 }
 
 fn get_app_data() -> Vec<TodoItem> {
-    let file = fs::read_to_string(PATH_TO_FILE).expect("Unable to read file");
-    let data: Data = serde_json::from_str(file.as_str()).expect("Parsing json has failed");
+    let (path_to_file_dir, path_to_file) = get_file_path();
 
-    data.items
+    match fs::read_dir(&path_to_file_dir) {
+        Ok(_) => {}
+        Err(_) => fs::create_dir_all(path_to_file_dir).unwrap(),
+    }
+
+    match fs::read_to_string(path_to_file) {
+        Ok(data) => {
+            let data: Data = serde_json::from_str(data.as_str()).expect("Parsing json has failed");
+            data.items
+        }
+        Err(_) => vec![],
+    }
+}
+
+fn get_file_path() -> (PathBuf, PathBuf) {
+    let mut path_to_file = dirs::home_dir().unwrap();
+    path_to_file.push(".rudo");
+    let path_to_file_dir = path_to_file.clone();
+
+    path_to_file.push("todos.json");
+
+    (path_to_file_dir, path_to_file)
 }
