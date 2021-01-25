@@ -9,15 +9,15 @@ use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::{IntoRawMode, RawTerminal};
 use tui::backend::TermionBackend;
-use tui::layout::{Alignment, Constraint, Direction, Layout};
-use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use tui::widgets::ListItem;
 use tui::Terminal;
 
 use crate::app::{App, AppStage, TodoItem};
+use crate::app_layout::AppLayout;
 
 mod app;
+mod app_layout;
 mod utils;
 
 const PATH_TO_FILE: &str = "./src/todos.json";
@@ -52,23 +52,8 @@ fn main() -> Result<(), io::Error> {
     loop {
         terminal
             .draw(|frame| {
-                // Create two chunks with equal horizontal screen space
-                let chunks = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints(
-                        [
-                            Constraint::Percentage(50),
-                            Constraint::Percentage(40),
-                            Constraint::Percentage(10),
-                        ]
-                        .as_ref(),
-                    )
-                    .split(frame.size());
-
-                // Iterate through all elements in the `items` app and append some debug text to it.
                 let items: Vec<ListItem> = app
-                    .list
-                    .items
+                    .get_filtered_items()
                     .iter()
                     .enumerate()
                     .map(|(index, item)| {
@@ -79,52 +64,34 @@ fn main() -> Result<(), io::Error> {
                             item.name.clone()
                         )))];
                         ListItem::new(lines)
-                            .style(Style::default().fg(Color::Black).bg(Color::White))
                     })
                     .collect();
 
-                // Create a List from all list items and highlight the currently selected one
-                let title = format!("Todo list - Sorting: {}", app.sorting_order);
+                let mut app_layout = AppLayout::new();
+                let frame_size = frame.size();
 
-                let items = List::new(items)
-                    .block(Block::default().borders(Borders::ALL).title(title))
-                    .highlight_style(
-                        Style::default()
-                            .bg(Color::LightGreen)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .highlight_symbol(">> ");
+                let (app_chunks, list_chunks) =
+                    app_layout.update_layout_chunks(&*app.stage.lock().unwrap(), frame_size);
 
-                // We can now render the item list
-                frame.render_stateful_widget(items, chunks[0], &mut app.list.state);
+                app_layout.draw_filter_widget(frame, &app.filter_term, app_chunks[0]);
+                app_layout.list_layout.draw_list_widget(
+                    frame,
+                    items,
+                    list_chunks[0],
+                    &mut app.list.state,
+                );
+                app_layout.draw_help_widget(frame, app_chunks[2]);
 
-                let create_block = |title| Block::default().borders(Borders::ALL).title(title);
-
-                // Add input block
-                match app.get_stage_clone() {
+                match &*app.stage.lock().unwrap() {
                     AppStage::CreateNewItem => {
-                        let input_block = Paragraph::new(format!("{}", app.new_item_name))
-                            .block(create_block("New todo item"))
-                            .alignment(Alignment::Left);
-
-                        frame.render_widget(input_block, chunks[1]);
+                        app_layout.list_layout.draw_new_item_widget(
+                            frame,
+                            &app.new_item_name,
+                            list_chunks[1],
+                        );
                     }
                     _ => (),
                 }
-
-                // Debug application state
-
-                let paragraph = Paragraph::new(format!(
-                    "{}",
-                    match *app.stage.lock().unwrap() {
-                        AppStage::CreateNewItem => format!("new item: {}", app.new_item_name),
-                        AppStage::Default => "default".to_string(),
-                    }
-                ))
-                .block(create_block("App stage"))
-                .alignment(Alignment::Left);
-
-                frame.render_widget(paragraph, chunks[2]);
             })
             .expect("Terminal draw failed");
 
@@ -145,7 +112,7 @@ fn spawn_key_event_listener_worker(app_stage: Arc<Mutex<AppStage>>) -> Receiver<
         for event in stdin.keys() {
             match event.unwrap() {
                 Key::Char('q') => match *app_stage.lock().unwrap() {
-                    AppStage::CreateNewItem => {
+                    AppStage::CreateNewItem | AppStage::Filter => {
                         sender.send(TerminalEvent::Input(Key::Char('q'))).unwrap()
                     }
                     _ => {
@@ -191,8 +158,15 @@ fn key_action_mapper(
                 }
                 key => app.new_item_add_character(key),
             },
+            AppStage::Filter => match key {
+                '\n' => {
+                    app.set_stage(AppStage::Default);
+                }
+                key => app.filter_term_add_character(key),
+            },
             AppStage::Default => match key {
                 'n' => app.set_stage(AppStage::CreateNewItem),
+                'f' => app.set_stage(AppStage::Filter),
                 'd' => app.remove_task(),
                 ' ' | '\n' => app.toggle_task(),
                 's' => app.toggle_sorting(),
@@ -212,6 +186,10 @@ fn key_action_mapper(
         TerminalEvent::Input(special_key) => match app.get_stage_clone() {
             AppStage::CreateNewItem => match special_key {
                 Key::Backspace => app.new_item_remove_character(),
+                _ => (),
+            },
+            AppStage::Filter => match special_key {
+                Key::Backspace => app.filter_term_remove_character(),
                 _ => (),
             },
             AppStage::Default => match special_key {
