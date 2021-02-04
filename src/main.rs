@@ -13,12 +13,14 @@ use tui::text::{Span, Spans};
 use tui::widgets::ListItem;
 use tui::Terminal;
 
-use crate::app::{App, AppStage, TodoItem};
+use crate::app::{App, AppStage};
 use crate::app_layout::AppLayout;
+use crate::todo_item::TodoItem;
 use std::path::PathBuf;
 
 mod app;
 mod app_layout;
+mod todo_item;
 mod utils;
 
 #[derive(Debug, Serialize, Deserialize)]

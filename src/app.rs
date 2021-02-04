@@ -1,84 +1,13 @@
+use crate::todo_item::TodoItem;
 use crate::utils::StatefulList;
-use chrono::{DateTime, Utc};
-use serde::export::Formatter;
-use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Result};
+use std::fmt::{Display, Formatter, Result};
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum AppStage {
     Default,
     CreateNewItem,
     Filter,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TodoItem {
-    pub id: Uuid,
-    pub name: String,
-    pub completed: bool,
-    #[serde(with = "my_date_format")]
-    pub created_date: DateTime<Utc>,
-    #[serde(with = "my_date_format")]
-    pub updated_date: DateTime<Utc>,
-}
-
-impl TodoItem {
-    fn new(name: &str) -> Self {
-        TodoItem {
-            id: Uuid::new_v4(),
-            name: String::from(name),
-            completed: false,
-            created_date: Utc::now(),
-            updated_date: Utc::now(),
-        }
-    }
-
-    fn set_completion(&mut self, is_complete: bool) -> &Self {
-        self.completed = is_complete;
-        self.updated_date = Utc::now();
-
-        self
-    }
-}
-
-mod my_date_format {
-    use chrono::{DateTime, TimeZone, Utc};
-    use serde::{self, Deserialize, Deserializer, Serializer};
-
-    const FORMAT: &'static str = "%Y-%m-%d %H:%M:%S";
-
-    // The signature of a serialize_with function must follow the pattern:
-    //
-    //    fn serialize<S>(&T, S) -> Result<S::Ok, S::Error>
-    //    where
-    //        S: Serializer
-    //
-    // although it may also be generic over the input types T.
-    pub fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let s = format!("{}", date.format(FORMAT));
-        serializer.serialize_str(&s)
-    }
-
-    // The signature of a deserialize_with function must follow the pattern:
-    //
-    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
-    //    where
-    //        D: Deserializer<'de>
-    //
-    // although it may also be generic over the output types T.
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Utc.datetime_from_str(&s, FORMAT)
-            .map_err(serde::de::Error::custom)
-    }
 }
 
 pub struct App {
@@ -234,6 +163,38 @@ impl App {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static TASK_A_NAME: &str = "task A";
+    static TASK_B_NAME: &str = "task B";
+
+    #[test]
+    fn it_creates_app() {
+        let items = create_todo_items();
+        let app = App::new(items.clone());
+
+        assert_eq!(app.items.len(), items.len());
+        assert_eq!(app.items[0].id, items[0].id);
+        assert_eq!(app.sorting_order, SortingOrder::Ascending);
+        assert_eq!(*app.stage.lock().unwrap(), AppStage::Default);
+        assert_eq!(app.new_item_name, "");
+        assert_eq!(app.filter_term, "");
+
+        // Correct item is selected
+        assert_eq!(app.list.get_selected_item().unwrap().id, items[0].id);
+    }
+
+    fn create_todo_items() -> Vec<TodoItem> {
+        vec![
+            TodoItem::new(TASK_A_NAME.clone()),
+            TodoItem::new(TASK_B_NAME.clone()),
+        ]
+    }
+}
+
+#[derive(PartialEq, Debug)]
 pub enum SortingOrder {
     Ascending,
     Descending,
