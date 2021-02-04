@@ -62,3 +62,21 @@ impl<T> StatefulList<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_gets_selected_item() {
+        let mut list = StatefulList::new(vec!["a", "b", "c"]);
+
+        assert_eq!(list.state.selected(), None);
+        list.next();
+        assert_eq!(list.get_selected_item(), Some(&"a"));
+        list.next();
+        assert_eq!(list.get_selected_item(), Some(&"b"));
+        list.previous();
+        assert_eq!(list.get_selected_item(), Some(&"a"));
+    }
+}
