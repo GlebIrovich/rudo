@@ -108,7 +108,11 @@ impl App {
         stage
     }
 
-    pub fn apply_filter(&mut self) {
+    pub fn get_filtered_items(&self) -> &Vec<TodoItem> {
+        &self.list.items
+    }
+
+    fn apply_filter(&mut self) {
         let items = self
             .items
             .iter()
@@ -122,18 +126,6 @@ impl App {
 
         self.list = StatefulList::new(items);
         self.select_first_task_or_none();
-    }
-
-    pub fn get_filtered_items(&self) -> Vec<&TodoItem> {
-        self.list
-            .items
-            .iter()
-            .filter(|item| {
-                item.name
-                    .to_lowercase()
-                    .contains(&self.filter_term.to_lowercase())
-            })
-            .collect()
     }
 
     fn sort_by_date(&mut self) {
@@ -167,8 +159,8 @@ impl App {
 mod tests {
     use super::*;
 
-    static TASK_A_NAME: &str = "task A";
-    static TASK_B_NAME: &str = "task B";
+    static TASK_A_NAME: &str = "A";
+    static TASK_B_NAME: &str = "B";
 
     #[test]
     fn it_creates_app() {
@@ -184,6 +176,48 @@ mod tests {
 
         // Correct item is selected
         assert_eq!(app.list.get_selected_item().unwrap().id, items[0].id);
+    }
+
+    #[test]
+    fn it_add_new_item() {
+        let mut app = App::new(vec![]);
+        app.new_item_add_character('a');
+
+        assert_eq!(app.new_item_name, "a");
+
+        app.add_new_item();
+        assert_eq!(app.items[0].name, "a");
+        assert_eq!(app.list.items[0].name, "a");
+    }
+
+    #[test]
+    fn it_removes_selected_item() {
+        let items = create_todo_items();
+        let mut app = App::new(vec![items[0].clone()]);
+
+        app.remove_task();
+        assert_eq!(app.items.len(), 0);
+    }
+
+    #[test]
+    fn it_toggles_sorting() {
+        let items = create_todo_items();
+        let mut app = App::new(vec![items[0].clone()]);
+
+        app.toggle_sorting();
+        assert_eq!(app.sorting_order, SortingOrder::Descending);
+    }
+
+    #[test]
+    fn it_filters_items() {
+        let items = create_todo_items();
+        let mut app = App::new(items.clone());
+
+        app.filter_term_add_character('a');
+        assert_eq!(app.filter_term, "a");
+        assert_eq!(app.items.len(), 2);
+        assert_eq!(app.list.items.len(), 1);
+        assert_eq!(app.get_filtered_items().len(), 1);
     }
 
     fn create_todo_items() -> Vec<TodoItem> {

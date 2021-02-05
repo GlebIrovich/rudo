@@ -39,7 +39,7 @@ impl<T> StatefulList<T> {
         let item = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    Some(0)
+                    Some(number_of_items - 1)
                 } else {
                     Some(i - 1)
                 }
