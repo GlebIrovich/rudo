@@ -39,7 +39,7 @@ impl<T> StatefulList<T> {
         let item = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    Some(0)
+                    Some(number_of_items - 1)
                 } else {
                     Some(i - 1)
                 }
@@ -60,5 +60,23 @@ impl<T> StatefulList<T> {
             Some(index) => Some(&self.items[index]),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_gets_selected_item() {
+        let mut list = StatefulList::new(vec!["a", "b", "c"]);
+
+        assert_eq!(list.state.selected(), None);
+        list.next();
+        assert_eq!(list.get_selected_item(), Some(&"a"));
+        list.next();
+        assert_eq!(list.get_selected_item(), Some(&"b"));
+        list.previous();
+        assert_eq!(list.get_selected_item(), Some(&"a"));
     }
 }
