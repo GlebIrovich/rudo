@@ -63,7 +63,7 @@ Currently, application is only supported by MacOS and Linux
 
 1. Go to the Rudo latest [release](https://github.com/GlebIrovich/rudo/releases)
 1. Download binaries for you OS
-1. Add an alias fot the script `alias rudo="PATH/TO/SCRIPT"`
+1. Add an alias for the script `alias rudo="PATH/TO/SCRIPT"`
 
 
 <!-- USAGE EXAMPLES -->
