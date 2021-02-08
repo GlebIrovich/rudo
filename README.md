@@ -83,6 +83,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Gleb Irovich - [Twitter](https://twitter.com/your_username) | [DEV.to](https://dev.to/glebirovich)
+Gleb Irovich - [Twitter](https://twitter.com/gleb_irovich) | [DEV.to](https://dev.to/glebirovich)
 
 Project Link: [https://github.com/GlebIrovich/rudo](https://github.com/GlebIrovich/rudo)
