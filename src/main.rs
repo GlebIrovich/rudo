@@ -16,11 +16,13 @@ use tui::Terminal;
 use crate::app::{App, AppStage};
 use crate::app_layout::AppLayout;
 use crate::todo_item::TodoItem;
+use crate::update::update;
 use std::path::PathBuf;
 
 mod app;
 mod app_layout;
 mod todo_item;
+mod update;
 mod utils;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -40,6 +42,9 @@ enum TerminalEvent {
 }
 
 fn main() -> Result<(), io::Error> {
+    // Update application to the latest release
+    update();
+
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
