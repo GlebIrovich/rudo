@@ -1,4 +1,4 @@
-name: Rudo CI/CD
+name: build
 
 on:
   push:
