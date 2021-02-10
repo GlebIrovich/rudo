@@ -63,7 +63,6 @@ fn main() -> Result<(), io::Error> {
                 let items: Vec<ListItem> = app
                     .get_filtered_items()
                     .iter()
-                    .enumerate()
                     .map(|(index, item)| {
                         let lines = vec![Spans::from(Span::from(format!(
                             "{}. [{}] - {}",

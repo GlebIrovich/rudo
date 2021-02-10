@@ -112,17 +112,19 @@ impl App {
         stage
     }
 
-    pub fn get_filtered_items(&self) -> Vec<TodoItem> {
-        self.list
-            .items
-            .iter()
-            .filter(|item| {
-                item.name
-                    .to_lowercase()
-                    .contains(&self.filter_term.to_lowercase())
-            })
-            .cloned()
-            .collect()
+    pub fn get_filtered_items(&self) -> Vec<(usize, TodoItem)> {
+        let mut items: Vec<(usize, TodoItem)> = vec![];
+        for (index, item) in self.list.items.iter().enumerate() {
+            if item
+                .name
+                .to_lowercase()
+                .contains(&self.filter_term.to_lowercase())
+            {
+                items.push((index, item.clone()));
+            }
+        }
+
+        items
     }
 
     fn sort_by_date(&mut self) {
@@ -212,6 +214,17 @@ mod tests {
         assert_eq!(app.filter_term, "a");
         assert_eq!(app.list.items.len(), 2);
         assert_eq!(app.get_filtered_items().len(), 1);
+    }
+
+    #[test]
+    fn it_should_keep_initial_list_enumeration() {
+        let items = create_todo_items();
+        let mut app = App::new(items.clone());
+
+        app.filter_term_add_character('b');
+        assert_eq!(app.filter_term, "b");
+        assert_eq!(app.get_filtered_items()[0].0, 1);
+        assert_eq!(app.get_filtered_items()[0].1.name, TASK_B_NAME);
     }
 
     fn create_todo_items() -> Vec<TodoItem> {
