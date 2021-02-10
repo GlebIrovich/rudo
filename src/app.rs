@@ -12,7 +12,6 @@ pub enum AppStage {
 
 pub struct App {
     pub list: StatefulList<TodoItem>,
-    pub items: Vec<TodoItem>,
     pub stage: Arc<Mutex<AppStage>>,
     pub new_item_name: String,
     pub filter_term: String,
@@ -22,7 +21,6 @@ pub struct App {
 impl App {
     pub fn new(items: Vec<TodoItem>) -> App {
         let mut app = App {
-            items: items.iter().cloned().collect(),
             list: StatefulList::new(items),
             stage: Arc::new(Mutex::new(AppStage::Default)),
             new_item_name: String::new(),
@@ -39,31 +37,36 @@ impl App {
         if self.new_item_name.len() == 0 {
             return;
         }
-        self.items.push(TodoItem::new(&self.new_item_name));
-        self.list = StatefulList::new(self.items.iter().cloned().collect());
+        self.list.items.push(TodoItem::new(&self.new_item_name));
     }
 
     pub fn toggle_task(&mut self) {
-        match self.get_selected_item_index() {
-            None => {}
-            Some(index) => {
-                let new_status = !self.items[index].completed;
-                let todo_item = &mut self.items[index];
-                todo_item.set_completion(new_status);
-
-                self.apply_filter();
+        match self.list.get_selected_item() {
+            Some(selected_item) => {
+                for item in &mut self.list.items {
+                    if item.id == selected_item.id {
+                        item.set_completion(!item.completed);
+                    }
+                }
             }
-        }
+            _ => {}
+        };
     }
 
     pub fn remove_task(&mut self) {
-        match self.get_selected_item_index() {
-            None => {}
-            Some(index) => {
-                self.items.remove(index);
-                self.list = StatefulList::new(self.items.iter().cloned().collect());
+        match self.list.get_selected_item() {
+            Some(selected_item) => {
+                let filtered_items: Vec<TodoItem> = self
+                    .list
+                    .items
+                    .iter()
+                    .filter(|item| item.id != selected_item.id)
+                    .cloned()
+                    .collect();
+                self.list = StatefulList::new(filtered_items);
                 self.select_first_task_or_none();
             }
+            _ => {}
         }
     }
 
@@ -98,12 +101,10 @@ impl App {
 
     pub fn filter_term_add_character(&mut self, letter: char) {
         self.filter_term = format!("{}{}", self.filter_term, letter);
-        self.apply_filter();
     }
 
     pub fn filter_term_remove_character(&mut self) {
         self.filter_term.pop();
-        self.apply_filter();
     }
 
     pub fn get_stage_clone(&self) -> AppStage {
@@ -111,12 +112,8 @@ impl App {
         stage
     }
 
-    pub fn get_filtered_items(&self) -> &Vec<TodoItem> {
-        &self.list.items
-    }
-
-    fn apply_filter(&mut self) {
-        let items = self
+    pub fn get_filtered_items(&self) -> Vec<TodoItem> {
+        self.list
             .items
             .iter()
             .filter(|item| {
@@ -125,10 +122,7 @@ impl App {
                     .contains(&self.filter_term.to_lowercase())
             })
             .cloned()
-            .collect();
-
-        self.list = StatefulList::new(items);
-        self.select_first_task_or_none();
+            .collect()
     }
 
     fn sort_by_date(&mut self) {
@@ -146,16 +140,6 @@ impl App {
             self.list.state.select(None);
         }
     }
-
-    fn get_selected_item_index(&self) -> Option<usize> {
-        match self.list.get_selected_item() {
-            Some(selected_item) => self
-                .items
-                .iter()
-                .position(|item| item.id == selected_item.id),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -170,8 +154,8 @@ mod tests {
         let items = create_todo_items();
         let app = App::new(items.clone());
 
-        assert_eq!(app.items.len(), items.len());
-        assert_eq!(app.items[0].id, items[0].id);
+        assert_eq!(app.list.items.len(), items.len());
+        assert_eq!(app.list.items[0].id, items[0].id);
         assert_eq!(app.sorting_order, SortingOrder::Ascending);
         assert_eq!(*app.stage.lock().unwrap(), AppStage::Default);
         assert_eq!(app.new_item_name, "");
@@ -189,7 +173,7 @@ mod tests {
         assert_eq!(app.new_item_name, "a");
 
         app.add_new_item();
-        assert_eq!(app.items[0].name, "a");
+        assert_eq!(app.list.items[0].name, "a");
         assert_eq!(app.list.items[0].name, "a");
     }
 
@@ -198,7 +182,7 @@ mod tests {
         let mut app = App::new(vec![]);
 
         app.add_new_item();
-        assert_eq!(app.items.len(), 0);
+        assert_eq!(app.list.items.len(), 0);
     }
 
     #[test]
@@ -207,7 +191,7 @@ mod tests {
         let mut app = App::new(vec![items[0].clone()]);
 
         app.remove_task();
-        assert_eq!(app.items.len(), 0);
+        assert_eq!(app.list.items.len(), 0);
     }
 
     #[test]
@@ -226,8 +210,7 @@ mod tests {
 
         app.filter_term_add_character('a');
         assert_eq!(app.filter_term, "a");
-        assert_eq!(app.items.len(), 2);
-        assert_eq!(app.list.items.len(), 1);
+        assert_eq!(app.list.items.len(), 2);
         assert_eq!(app.get_filtered_items().len(), 1);
     }
 
