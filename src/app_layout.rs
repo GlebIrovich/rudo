@@ -144,7 +144,7 @@ impl<'a> AppLayout<'a> {
 
         self.help_block = match stage {
             AppStage::Default => {
-                Paragraph::new("q - quite, s - sort, n - new task, f - filter task")
+                Paragraph::new("q - quit, s - sort, n - new task, f - filter task")
                     .block(help_block)
             }
             AppStage::CreateNewItem => Paragraph::new("Enter - add item").block(help_block),

@@ -43,7 +43,7 @@ enum TerminalEvent {
 
 fn main() -> Result<(), io::Error> {
     // Update application to the latest release
-    update();
+    update().unwrap();
 
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);

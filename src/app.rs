@@ -36,6 +36,9 @@ impl App {
     }
 
     pub fn add_new_item(&mut self) {
+        if self.new_item_name.len() == 0 {
+            return;
+        }
         self.items.push(TodoItem::new(&self.new_item_name));
         self.list = StatefulList::new(self.items.iter().cloned().collect());
     }
@@ -188,6 +191,14 @@ mod tests {
         app.add_new_item();
         assert_eq!(app.items[0].name, "a");
         assert_eq!(app.list.items[0].name, "a");
+    }
+
+    #[test]
+    fn it_should_not_add_empty_item() {
+        let mut app = App::new(vec![]);
+
+        app.add_new_item();
+        assert_eq!(app.items.len(), 0);
     }
 
     #[test]
