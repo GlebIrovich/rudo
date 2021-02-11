@@ -6,14 +6,15 @@ use std::sync::{Arc, Mutex};
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum AppStage {
     Default,
-    CreateNewItem,
+    CreateItem,
+    UpdateItem,
     Filter,
 }
 
 pub struct App {
     pub list: StatefulList<TodoItem>,
     pub stage: Arc<Mutex<AppStage>>,
-    pub new_item_name: String,
+    pub item_name_input: String,
     pub filter_term: String,
     pub sorting_order: SortingOrder,
 }
@@ -23,7 +24,7 @@ impl App {
         let mut app = App {
             list: StatefulList::new(items),
             stage: Arc::new(Mutex::new(AppStage::Default)),
-            new_item_name: String::new(),
+            item_name_input: String::new(),
             sorting_order: SortingOrder::Ascending,
             filter_term: String::new(),
         };
@@ -34,10 +35,26 @@ impl App {
     }
 
     pub fn add_new_item(&mut self) {
-        if self.new_item_name.len() == 0 {
+        if self.item_name_input.len() == 0 {
             return;
         }
-        self.list.items.push(TodoItem::new(&self.new_item_name));
+        self.list.items.push(TodoItem::new(&self.item_name_input));
+    }
+
+    pub fn update_item(&mut self) {
+        if self.item_name_input.len() == 0 {
+            return;
+        }
+        match self.list.get_selected_item() {
+            None => {}
+            Some(selected_item) => {
+                for item in &mut self.list.items {
+                    if item.id == selected_item.id {
+                        item.name = self.item_name_input.clone();
+                    }
+                }
+            }
+        }
     }
 
     pub fn toggle_task(&mut self) {
@@ -71,8 +88,17 @@ impl App {
     }
 
     pub fn set_stage(&mut self, stage: AppStage) {
-        *self.stage.lock().unwrap() = stage;
-        self.reset_new_item_name();
+        self.reset_item_name_input();
+        match stage {
+            AppStage::UpdateItem => match self.list.get_selected_item() {
+                Some(selected_item) => {
+                    self.item_name_input = selected_item.name;
+                    *self.stage.lock().unwrap() = stage;
+                }
+                _ => {}
+            },
+            _ => *self.stage.lock().unwrap() = stage,
+        }
     }
 
     fn set_sorting_order(&mut self, order: SortingOrder) {
@@ -87,16 +113,16 @@ impl App {
         }
     }
 
-    pub fn new_item_add_character(&mut self, letter: char) {
-        self.new_item_name = format!("{}{}", self.new_item_name, letter);
+    pub fn item_input_add_character(&mut self, letter: char) {
+        self.item_name_input = format!("{}{}", self.item_name_input, letter);
     }
 
-    pub fn new_item_remove_character(&mut self) {
-        self.new_item_name.pop();
+    pub fn item_input_remove_character(&mut self) {
+        self.item_name_input.pop();
     }
 
-    pub fn reset_new_item_name(&mut self) {
-        self.new_item_name = String::new()
+    pub fn reset_item_name_input(&mut self) {
+        self.item_name_input = String::new()
     }
 
     pub fn filter_term_add_character(&mut self, letter: char) {
@@ -160,7 +186,7 @@ mod tests {
         assert_eq!(app.list.items[0].id, items[0].id);
         assert_eq!(app.sorting_order, SortingOrder::Ascending);
         assert_eq!(*app.stage.lock().unwrap(), AppStage::Default);
-        assert_eq!(app.new_item_name, "");
+        assert_eq!(app.item_name_input, "");
         assert_eq!(app.filter_term, "");
 
         // Correct item is selected
@@ -170,12 +196,23 @@ mod tests {
     #[test]
     fn it_add_new_item() {
         let mut app = App::new(vec![]);
-        app.new_item_add_character('a');
+        app.item_input_add_character('a');
 
-        assert_eq!(app.new_item_name, "a");
+        assert_eq!(app.item_name_input, "a");
 
         app.add_new_item();
         assert_eq!(app.list.items[0].name, "a");
+    }
+
+    #[test]
+    fn it_should_edit_existing_item() {
+        let mut app = App::new(vec![TodoItem::new(TASK_A_NAME)]);
+        app.item_input_add_character('a');
+
+        assert_eq!(app.item_name_input, "a");
+
+        app.update_item();
+        assert_eq!(app.list.items.len(), 1);
         assert_eq!(app.list.items[0].name, "a");
     }
 

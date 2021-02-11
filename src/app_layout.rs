@@ -22,7 +22,9 @@ impl<'a> ListLayout<'a> {
 
     pub fn update_layout_chunks(&mut self, stage: &AppStage, area: Rect) -> Vec<Rect> {
         let constraint: Vec<Constraint> = match stage {
-            AppStage::CreateNewItem => vec![Constraint::Percentage(50), Constraint::Percentage(50)],
+            AppStage::CreateItem | AppStage::UpdateItem => {
+                vec![Constraint::Percentage(50), Constraint::Percentage(50)]
+            }
             _ => vec![Constraint::Percentage(100)],
         };
 
@@ -37,13 +39,17 @@ impl<'a> ListLayout<'a> {
             .title("My tasks");
 
         let border_color = match stage {
-            AppStage::CreateNewItem => Color::Green,
+            AppStage::CreateItem | AppStage::UpdateItem => Color::Green,
             _ => Color::Reset,
         };
 
         self.new_item_input_block = Block::default()
             .borders(Borders::ALL)
-            .title("Type new task")
+            .title(match stage {
+                AppStage::CreateItem => "Create task",
+                AppStage::UpdateItem => "Edit task",
+                _ => "",
+            })
             .border_style(Style::default().fg(border_color));
 
         self.layout = Layout::default()
@@ -80,17 +86,17 @@ impl<'a> ListLayout<'a> {
             .block(block)
     }
 
-    pub fn draw_new_item_widget<B>(&self, frame: &mut Frame<B>, item_name: &str, area: Rect)
+    pub fn draw_item_input_widget<B>(&self, frame: &mut Frame<B>, item_name: &str, area: Rect)
     where
         B: Backend,
     {
         frame.render_widget(
-            self.get_new_item_widget(item_name, self.new_item_input_block.clone()),
+            self.get_item_input_widget(item_name, self.new_item_input_block.clone()),
             area,
         );
     }
 
-    fn get_new_item_widget(&self, item_name: &str, block: Block<'a>) -> Paragraph<'a> {
+    fn get_item_input_widget(&self, item_name: &str, block: Block<'a>) -> Paragraph<'a> {
         Paragraph::new(format!("{}", item_name))
             .block(block)
             .wrap(Wrap { trim: false })
@@ -144,10 +150,11 @@ impl<'a> AppLayout<'a> {
 
         self.help_block = match stage {
             AppStage::Default => {
-                Paragraph::new("q - quit, s - sort, n - new task, f - filter task")
+                Paragraph::new("q - quit, s - sort, n - new task, e - edit, f - filter task")
                     .block(help_block)
             }
-            AppStage::CreateNewItem => Paragraph::new("Enter - add item").block(help_block),
+            AppStage::CreateItem => Paragraph::new("Enter - add item").block(help_block),
+            AppStage::UpdateItem => Paragraph::new("Enter - apply changes").block(help_block),
             AppStage::Filter => Paragraph::new("Enter - apply filter").block(help_block),
         };
 
