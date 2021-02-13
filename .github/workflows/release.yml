@@ -24,7 +24,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build
-      run: cargo build --release --locked --target=${{ matrix.target }} && cd target/${{ matrix.target }} && tar -czvf ${{ matrix.artifact_name }}.tar.gz rudo
+      run: cargo build --release --locked --target=${{ matrix.target }} && cd target/${{ matrix.target }}/release && tar -czvf ${{ matrix.artifact_name }}.tar.gz rudo
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v2
       with:
