@@ -29,6 +29,6 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: target/release/${{ matrix.artifact_name }}.tar.gz
+        file: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}.tar.gz
         asset_name: ${{ matrix.asset_name }}.tar.gz
         tag: ${{ github.ref }}
