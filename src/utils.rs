@@ -5,7 +5,10 @@ pub struct StatefulList<T> {
     pub items: Vec<T>,
 }
 
-impl<T> StatefulList<T> {
+impl<T> StatefulList<T>
+where
+    T: Clone,
+{
     pub fn new(items: Vec<T>) -> StatefulList<T> {
         StatefulList {
             state: ListState::default(),
@@ -55,9 +58,9 @@ impl<T> StatefulList<T> {
         self.state.select(item);
     }
 
-    pub fn get_selected_item(&self) -> Option<&T> {
+    pub fn get_selected_item(&self) -> Option<T> {
         match self.state.selected() {
-            Some(index) => Some(&self.items[index]),
+            Some(index) => Some(self.items[index].clone()),
             _ => None,
         }
     }
@@ -73,10 +76,10 @@ mod tests {
 
         assert_eq!(list.state.selected(), None);
         list.next();
-        assert_eq!(list.get_selected_item(), Some(&"a"));
+        assert_eq!(list.get_selected_item(), Some("a"));
         list.next();
-        assert_eq!(list.get_selected_item(), Some(&"b"));
+        assert_eq!(list.get_selected_item(), Some("b"));
         list.previous();
-        assert_eq!(list.get_selected_item(), Some(&"a"));
+        assert_eq!(list.get_selected_item(), Some("a"));
     }
 }

@@ -1,6 +1,5 @@
 use self_update::cargo_crate_version;
 use std::env;
-use std::env::VarError;
 
 const REPO_OWNER: &str = "GlebIrovich";
 const REPO_NAME: &str = "rudo";

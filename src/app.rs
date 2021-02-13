@@ -6,15 +6,15 @@ use std::sync::{Arc, Mutex};
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum AppStage {
     Default,
-    CreateNewItem,
+    CreateItem,
+    UpdateItem,
     Filter,
 }
 
 pub struct App {
     pub list: StatefulList<TodoItem>,
-    pub items: Vec<TodoItem>,
     pub stage: Arc<Mutex<AppStage>>,
-    pub new_item_name: String,
+    pub item_name_input: String,
     pub filter_term: String,
     pub sorting_order: SortingOrder,
 }
@@ -22,10 +22,9 @@ pub struct App {
 impl App {
     pub fn new(items: Vec<TodoItem>) -> App {
         let mut app = App {
-            items: items.iter().cloned().collect(),
             list: StatefulList::new(items),
             stage: Arc::new(Mutex::new(AppStage::Default)),
-            new_item_name: String::new(),
+            item_name_input: String::new(),
             sorting_order: SortingOrder::Ascending,
             filter_term: String::new(),
         };
@@ -36,37 +35,70 @@ impl App {
     }
 
     pub fn add_new_item(&mut self) {
-        self.items.push(TodoItem::new(&self.new_item_name));
-        self.list = StatefulList::new(self.items.iter().cloned().collect());
+        if self.item_name_input.len() == 0 {
+            return;
+        }
+        self.list.items.push(TodoItem::new(&self.item_name_input));
     }
 
-    pub fn toggle_task(&mut self) {
-        match self.get_selected_item_index() {
+    pub fn update_item(&mut self) {
+        if self.item_name_input.len() == 0 {
+            return;
+        }
+        match self.list.get_selected_item() {
             None => {}
-            Some(index) => {
-                let new_status = !self.items[index].completed;
-                let todo_item = &mut self.items[index];
-                todo_item.set_completion(new_status);
-
-                self.apply_filter();
+            Some(selected_item) => {
+                for item in &mut self.list.items {
+                    if item.id == selected_item.id {
+                        item.name = self.item_name_input.clone();
+                    }
+                }
             }
         }
     }
 
+    pub fn toggle_task(&mut self) {
+        match self.list.get_selected_item() {
+            Some(selected_item) => {
+                for item in &mut self.list.items {
+                    if item.id == selected_item.id {
+                        item.set_completion(!item.completed);
+                    }
+                }
+            }
+            _ => {}
+        };
+    }
+
     pub fn remove_task(&mut self) {
-        match self.get_selected_item_index() {
-            None => {}
-            Some(index) => {
-                self.items.remove(index);
-                self.list = StatefulList::new(self.items.iter().cloned().collect());
+        match self.list.get_selected_item() {
+            Some(selected_item) => {
+                let filtered_items: Vec<TodoItem> = self
+                    .list
+                    .items
+                    .iter()
+                    .filter(|item| item.id != selected_item.id)
+                    .cloned()
+                    .collect();
+                self.list = StatefulList::new(filtered_items);
                 self.select_first_task_or_none();
             }
+            _ => {}
         }
     }
 
     pub fn set_stage(&mut self, stage: AppStage) {
-        *self.stage.lock().unwrap() = stage;
-        self.reset_new_item_name();
+        self.reset_item_name_input();
+        match stage {
+            AppStage::UpdateItem => match self.list.get_selected_item() {
+                Some(selected_item) => {
+                    self.item_name_input = selected_item.name;
+                    *self.stage.lock().unwrap() = stage;
+                }
+                _ => {}
+            },
+            _ => *self.stage.lock().unwrap() = stage,
+        }
     }
 
     fn set_sorting_order(&mut self, order: SortingOrder) {
@@ -81,26 +113,24 @@ impl App {
         }
     }
 
-    pub fn new_item_add_character(&mut self, letter: char) {
-        self.new_item_name = format!("{}{}", self.new_item_name, letter);
+    pub fn item_input_add_character(&mut self, letter: char) {
+        self.item_name_input = format!("{}{}", self.item_name_input, letter);
     }
 
-    pub fn new_item_remove_character(&mut self) {
-        self.new_item_name.pop();
+    pub fn item_input_remove_character(&mut self) {
+        self.item_name_input.pop();
     }
 
-    pub fn reset_new_item_name(&mut self) {
-        self.new_item_name = String::new()
+    pub fn reset_item_name_input(&mut self) {
+        self.item_name_input = String::new()
     }
 
     pub fn filter_term_add_character(&mut self, letter: char) {
         self.filter_term = format!("{}{}", self.filter_term, letter);
-        self.apply_filter();
     }
 
     pub fn filter_term_remove_character(&mut self) {
         self.filter_term.pop();
-        self.apply_filter();
     }
 
     pub fn get_stage_clone(&self) -> AppStage {
@@ -108,24 +138,19 @@ impl App {
         stage
     }
 
-    pub fn get_filtered_items(&self) -> &Vec<TodoItem> {
-        &self.list.items
-    }
+    pub fn get_filtered_items(&self) -> Vec<(usize, TodoItem)> {
+        let mut items: Vec<(usize, TodoItem)> = vec![];
+        for (index, item) in self.list.items.iter().enumerate() {
+            if item
+                .name
+                .to_lowercase()
+                .contains(&self.filter_term.to_lowercase())
+            {
+                items.push((index, item.clone()));
+            }
+        }
 
-    fn apply_filter(&mut self) {
-        let items = self
-            .items
-            .iter()
-            .filter(|item| {
-                item.name
-                    .to_lowercase()
-                    .contains(&self.filter_term.to_lowercase())
-            })
-            .cloned()
-            .collect();
-
-        self.list = StatefulList::new(items);
-        self.select_first_task_or_none();
+        items
     }
 
     fn sort_by_date(&mut self) {
@@ -143,16 +168,6 @@ impl App {
             self.list.state.select(None);
         }
     }
-
-    fn get_selected_item_index(&self) -> Option<usize> {
-        match self.list.get_selected_item() {
-            Some(selected_item) => self
-                .items
-                .iter()
-                .position(|item| item.id == selected_item.id),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -167,11 +182,11 @@ mod tests {
         let items = create_todo_items();
         let app = App::new(items.clone());
 
-        assert_eq!(app.items.len(), items.len());
-        assert_eq!(app.items[0].id, items[0].id);
+        assert_eq!(app.list.items.len(), items.len());
+        assert_eq!(app.list.items[0].id, items[0].id);
         assert_eq!(app.sorting_order, SortingOrder::Ascending);
         assert_eq!(*app.stage.lock().unwrap(), AppStage::Default);
-        assert_eq!(app.new_item_name, "");
+        assert_eq!(app.item_name_input, "");
         assert_eq!(app.filter_term, "");
 
         // Correct item is selected
@@ -181,13 +196,32 @@ mod tests {
     #[test]
     fn it_add_new_item() {
         let mut app = App::new(vec![]);
-        app.new_item_add_character('a');
+        app.item_input_add_character('a');
 
-        assert_eq!(app.new_item_name, "a");
+        assert_eq!(app.item_name_input, "a");
 
         app.add_new_item();
-        assert_eq!(app.items[0].name, "a");
         assert_eq!(app.list.items[0].name, "a");
+    }
+
+    #[test]
+    fn it_should_edit_existing_item() {
+        let mut app = App::new(vec![TodoItem::new(TASK_A_NAME)]);
+        app.item_input_add_character('a');
+
+        assert_eq!(app.item_name_input, "a");
+
+        app.update_item();
+        assert_eq!(app.list.items.len(), 1);
+        assert_eq!(app.list.items[0].name, "a");
+    }
+
+    #[test]
+    fn it_should_not_add_empty_item() {
+        let mut app = App::new(vec![]);
+
+        app.add_new_item();
+        assert_eq!(app.list.items.len(), 0);
     }
 
     #[test]
@@ -196,7 +230,7 @@ mod tests {
         let mut app = App::new(vec![items[0].clone()]);
 
         app.remove_task();
-        assert_eq!(app.items.len(), 0);
+        assert_eq!(app.list.items.len(), 0);
     }
 
     #[test]
@@ -215,9 +249,19 @@ mod tests {
 
         app.filter_term_add_character('a');
         assert_eq!(app.filter_term, "a");
-        assert_eq!(app.items.len(), 2);
-        assert_eq!(app.list.items.len(), 1);
+        assert_eq!(app.list.items.len(), 2);
         assert_eq!(app.get_filtered_items().len(), 1);
+    }
+
+    #[test]
+    fn it_should_keep_initial_list_enumeration() {
+        let items = create_todo_items();
+        let mut app = App::new(items.clone());
+
+        app.filter_term_add_character('b');
+        assert_eq!(app.filter_term, "b");
+        assert_eq!(app.get_filtered_items()[0].0, 1);
+        assert_eq!(app.get_filtered_items()[0].1.name, TASK_B_NAME);
     }
 
     fn create_todo_items() -> Vec<TodoItem> {

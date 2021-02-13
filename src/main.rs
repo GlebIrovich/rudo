@@ -43,7 +43,7 @@ enum TerminalEvent {
 
 fn main() -> Result<(), io::Error> {
     // Update application to the latest release
-    update();
+    update().unwrap();
 
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);
@@ -63,7 +63,6 @@ fn main() -> Result<(), io::Error> {
                 let items: Vec<ListItem> = app
                     .get_filtered_items()
                     .iter()
-                    .enumerate()
                     .map(|(index, item)| {
                         let lines = vec![Spans::from(Span::from(format!(
                             "{}. [{}] - {}",
@@ -91,10 +90,10 @@ fn main() -> Result<(), io::Error> {
                 app_layout.draw_help_widget(frame, app_chunks[2]);
 
                 match &*app.stage.lock().unwrap() {
-                    AppStage::CreateNewItem => {
-                        app_layout.list_layout.draw_new_item_widget(
+                    AppStage::CreateItem | AppStage::UpdateItem => {
+                        app_layout.list_layout.draw_item_input_widget(
                             frame,
-                            &app.new_item_name,
+                            &app.item_name_input,
                             list_chunks[1],
                         );
                     }
@@ -120,7 +119,7 @@ fn spawn_key_event_listener_worker(app_stage: Arc<Mutex<AppStage>>) -> Receiver<
         for event in stdin.keys() {
             match event.unwrap() {
                 Key::Char('q') => match *app_stage.lock().unwrap() {
-                    AppStage::CreateNewItem | AppStage::Filter => {
+                    AppStage::CreateItem | AppStage::UpdateItem | AppStage::Filter => {
                         sender.send(TerminalEvent::Input(Key::Char('q'))).unwrap()
                     }
                     _ => {
@@ -158,13 +157,21 @@ fn key_action_mapper(
 ) -> bool {
     match event {
         TerminalEvent::Input(Key::Char(key)) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => match key {
+            AppStage::CreateItem => match key {
                 '\n' => {
                     app.add_new_item();
-                    app.reset_new_item_name();
+                    app.reset_item_name_input();
                     app.set_stage(AppStage::Default);
                 }
-                key => app.new_item_add_character(key),
+                key => app.item_input_add_character(key),
+            },
+            AppStage::UpdateItem => match key {
+                '\n' => {
+                    app.update_item();
+                    app.reset_item_name_input();
+                    app.set_stage(AppStage::Default);
+                }
+                key => app.item_input_add_character(key),
             },
             AppStage::Filter => match key {
                 '\n' => {
@@ -173,8 +180,9 @@ fn key_action_mapper(
                 key => app.filter_term_add_character(key),
             },
             AppStage::Default => match key {
-                'n' => app.set_stage(AppStage::CreateNewItem),
+                'n' => app.set_stage(AppStage::CreateItem),
                 'f' => app.set_stage(AppStage::Filter),
+                'e' => app.set_stage(AppStage::UpdateItem),
                 'd' => app.remove_task(),
                 ' ' | '\n' => app.toggle_task(),
                 's' => app.toggle_sorting(),
@@ -189,8 +197,8 @@ fn key_action_mapper(
             },
         },
         TerminalEvent::Input(special_key) => match app.get_stage_clone() {
-            AppStage::CreateNewItem => match special_key {
-                Key::Backspace => app.new_item_remove_character(),
+            AppStage::CreateItem | AppStage::UpdateItem => match special_key {
+                Key::Backspace => app.item_input_remove_character(),
                 _ => (),
             },
             AppStage::Filter => match special_key {
