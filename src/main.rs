@@ -43,7 +43,17 @@ enum TerminalEvent {
 
 fn main() -> Result<(), io::Error> {
     // Update application to the latest release
-    update().unwrap();
+    match update() {
+        Ok(_) => {}
+        Err(error) => {
+            println!("---------------------------------------");
+            println!("Error occurred during update. Please report it here:");
+            println!("https://github.com/GlebIrovich/rudo/issues");
+
+            println!("{}", error);
+            println!("---------------------------------------");
+        }
+    };
 
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);
