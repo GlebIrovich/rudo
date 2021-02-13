@@ -94,6 +94,12 @@ impl<'a> ListLayout<'a> {
             self.get_item_input_widget(item_name, self.new_item_input_block.clone()),
             area,
         );
+        let padding = 1;
+        let item_length: u16 = item_name.len() as u16;
+        let line_length = area.x - padding * 2;
+        let offset_y = (item_length / line_length) + padding;
+        let offset_x = item_length - (item_length / line_length * line_length) + padding;
+        frame.set_cursor(area.x + offset_x, area.y + offset_y);
     }
 
     fn get_item_input_widget(&self, item_name: &str, block: Block<'a>) -> Paragraph<'a> {
