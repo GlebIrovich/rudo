@@ -43,7 +43,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-![](images/rudo-screeshot.png)
+![](images/rudo.gif)
 
 **Rudo** (from **Rust** + **todo**) is an attempt of transformimg developers' primary tool, terminal, to a feature
 reach application. When starting that project, I was challenged to create UX experience which can be compared
