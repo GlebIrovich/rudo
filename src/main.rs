@@ -87,8 +87,7 @@ fn main() -> Result<(), io::Error> {
                 let mut app_layout = AppLayout::new();
                 let frame_size = frame.size();
 
-                let (app_chunks, list_chunks) =
-                    app_layout.update_layout_chunks(&*app.stage.lock().unwrap(), frame_size);
+                let (app_chunks, list_chunks) = app_layout.update_layout_chunks(&app, frame_size);
 
                 app_layout.draw_filter_widget(frame, &app.filter_term, app_chunks[0]);
                 app_layout.list_layout.draw_list_widget(

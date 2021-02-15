@@ -14,7 +14,7 @@ pub struct TodoItem {
 }
 
 impl TodoItem {
-    pub(crate) fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Self {
         TodoItem {
             id: Uuid::new_v4(),
             name: String::from(name),
@@ -24,8 +24,15 @@ impl TodoItem {
         }
     }
 
-    pub(crate) fn set_completion(&mut self, is_complete: bool) -> &Self {
+    pub fn set_completion(&mut self, is_complete: bool) -> &Self {
         self.completed = is_complete;
+        self.updated_date = Utc::now();
+
+        self
+    }
+
+    pub fn set_name(&mut self, name: &str) -> &Self {
+        self.name = name.to_string();
         self.updated_date = Utc::now();
 
         self
@@ -53,6 +60,17 @@ mod tests {
         assert_eq!(item.completed, false);
         item.set_completion(true);
         assert_eq!(item.completed, true);
+    }
+
+    #[test]
+    fn it_sets_name() {
+        let name = "test task";
+        let new_name = "new test task";
+        let mut item = TodoItem::new(name);
+
+        item.set_name(new_name);
+
+        assert_eq!(item.name, new_name);
     }
 }
 
