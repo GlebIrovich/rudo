@@ -16,7 +16,7 @@ pub struct App {
     pub stage: Arc<Mutex<AppStage>>,
     pub item_name_input: String,
     pub filter_term: String,
-    pub sorting_order: SortingOrder,
+    pub sorting_order: AppSorting,
 }
 
 impl App {
@@ -25,11 +25,11 @@ impl App {
             list: StatefulList::new(items),
             stage: Arc::new(Mutex::new(AppStage::Default)),
             item_name_input: String::new(),
-            sorting_order: SortingOrder::Ascending,
+            sorting_order: AppSorting::ByDate(SortingOrder::Ascending),
             filter_term: String::new(),
         };
 
-        app.sort_by_date();
+        app.sort_by_date(SortingOrder::Ascending);
         app.select_first_task_or_none();
         app
     }
@@ -50,7 +50,7 @@ impl App {
             Some(selected_item) => {
                 for item in &mut self.list.items {
                     if item.id == selected_item.id {
-                        item.name = self.item_name_input.clone();
+                        item.set_name(self.item_name_input.as_str());
                     }
                 }
             }
@@ -101,16 +101,32 @@ impl App {
         }
     }
 
-    fn set_sorting_order(&mut self, order: SortingOrder) {
-        self.sorting_order = order;
-        self.sort_by_date();
+    fn set_sorting_order(&mut self, order: AppSorting) {
+        self.sorting_order = order.clone();
+        match order {
+            AppSorting::ByDate(order) => self.sort_by_date(order),
+            AppSorting::ByCompletion(order) => self.sort_by_completion(order),
+        };
     }
 
     pub fn toggle_sorting(&mut self) {
-        match self.sorting_order {
-            SortingOrder::Ascending => self.set_sorting_order(SortingOrder::Descending),
-            SortingOrder::Descending => self.set_sorting_order(SortingOrder::Ascending),
-        }
+        let sorting_rotation_list = [
+            AppSorting::ByDate(SortingOrder::Ascending),
+            AppSorting::ByDate(SortingOrder::Descending),
+            AppSorting::ByCompletion(SortingOrder::Ascending),
+            AppSorting::ByCompletion(SortingOrder::Descending),
+        ];
+
+        let current_sorting_index = sorting_rotation_list
+            .iter()
+            .position(|sorting| sorting.eq(&self.sorting_order))
+            .unwrap();
+        let next_sorting = match sorting_rotation_list.get(current_sorting_index + 1) {
+            None => sorting_rotation_list.get(0).unwrap(),
+            Some(order) => order,
+        };
+
+        self.set_sorting_order(next_sorting.clone());
     }
 
     pub fn item_input_add_character(&mut self, letter: char) {
@@ -153,12 +169,22 @@ impl App {
         items
     }
 
-    fn sort_by_date(&mut self) {
-        let order = &self.sorting_order;
-        self.list.items.sort_by(|item_a, item_b| match order {
-            SortingOrder::Ascending => item_a.updated_date.cmp(&item_b.updated_date),
-            SortingOrder::Descending => item_a.updated_date.cmp(&item_b.updated_date).reverse(),
-        });
+    fn sort_by_date(&mut self, sorting_order: SortingOrder) {
+        self.list
+            .items
+            .sort_by(|item_a, item_b| match sorting_order {
+                SortingOrder::Ascending => item_a.updated_date.cmp(&item_b.updated_date),
+                SortingOrder::Descending => item_a.updated_date.cmp(&item_b.updated_date).reverse(),
+            });
+    }
+
+    fn sort_by_completion(&mut self, sorting_order: SortingOrder) {
+        self.list
+            .items
+            .sort_by(|item_a, item_b| match sorting_order {
+                SortingOrder::Ascending => item_a.completed.cmp(&item_b.completed).reverse(),
+                SortingOrder::Descending => item_a.completed.cmp(&item_b.completed),
+            });
     }
 
     fn select_first_task_or_none(&mut self) {
@@ -184,7 +210,10 @@ mod tests {
 
         assert_eq!(app.list.items.len(), items.len());
         assert_eq!(app.list.items[0].id, items[0].id);
-        assert_eq!(app.sorting_order, SortingOrder::Ascending);
+        assert_eq!(
+            app.sorting_order,
+            AppSorting::ByDate(SortingOrder::Ascending)
+        );
         assert_eq!(*app.stage.lock().unwrap(), AppStage::Default);
         assert_eq!(app.item_name_input, "");
         assert_eq!(app.filter_term, "");
@@ -236,10 +265,36 @@ mod tests {
     #[test]
     fn it_toggles_sorting() {
         let items = create_todo_items();
-        let mut app = App::new(vec![items[0].clone()]);
+        let mut app = App::new(items);
+        let item_id = app.list.items[0].set_completion(true).id;
 
         app.toggle_sorting();
-        assert_eq!(app.sorting_order, SortingOrder::Descending);
+        assert_eq!(
+            app.sorting_order,
+            AppSorting::ByDate(SortingOrder::Descending)
+        );
+
+        app.toggle_sorting();
+        assert_eq!(
+            app.sorting_order,
+            AppSorting::ByCompletion(SortingOrder::Ascending)
+        );
+
+        assert_eq!(app.list.items[0].id, item_id);
+
+        app.toggle_sorting();
+        assert_eq!(
+            app.sorting_order,
+            AppSorting::ByCompletion(SortingOrder::Descending)
+        );
+
+        assert_eq!(app.list.items[1].id, item_id);
+
+        app.toggle_sorting();
+        assert_eq!(
+            app.sorting_order,
+            AppSorting::ByDate(SortingOrder::Ascending)
+        );
     }
 
     #[test]
@@ -272,21 +327,29 @@ mod tests {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub enum SortingOrder {
-    Ascending,
-    Descending,
+#[derive(PartialEq, Debug, Clone)]
+pub enum AppSorting {
+    ByDate(SortingOrder),
+    ByCompletion(SortingOrder),
 }
 
-impl Display for SortingOrder {
+impl Display for AppSorting {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "{}",
             match &self {
-                SortingOrder::Ascending => "ascending",
-                SortingOrder::Descending => "descending",
+                AppSorting::ByDate(SortingOrder::Ascending) => "Most recently updated first",
+                AppSorting::ByDate(SortingOrder::Descending) => "Least recently updated first",
+                AppSorting::ByCompletion(SortingOrder::Ascending) => "Done first",
+                AppSorting::ByCompletion(SortingOrder::Descending) => "Undone first",
             }
         )
     }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum SortingOrder {
+    Ascending,
+    Descending,
 }

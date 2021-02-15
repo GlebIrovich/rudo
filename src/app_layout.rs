@@ -1,4 +1,4 @@
-use crate::app::AppStage;
+use crate::app::{App, AppSorting, AppStage};
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
@@ -20,7 +20,12 @@ impl<'a> ListLayout<'a> {
         }
     }
 
-    pub fn update_layout_chunks(&mut self, stage: &AppStage, area: Rect) -> Vec<Rect> {
+    pub fn update_layout_chunks(
+        &mut self,
+        stage: &AppStage,
+        sorting: &AppSorting,
+        area: Rect,
+    ) -> Vec<Rect> {
         let constraint: Vec<Constraint> = match stage {
             AppStage::CreateItem | AppStage::UpdateItem => {
                 vec![Constraint::Percentage(50), Constraint::Percentage(50)]
@@ -36,7 +41,7 @@ impl<'a> ListLayout<'a> {
         self.list_block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(border_color))
-            .title("My tasks");
+            .title(format!("My tasks  |  Sorting: {}", sorting));
 
         let border_color = match stage {
             AppStage::CreateItem | AppStage::UpdateItem => Color::Green,
@@ -129,7 +134,9 @@ impl<'a> AppLayout<'a> {
         }
     }
 
-    pub fn update_layout_chunks(&mut self, stage: &AppStage, area: Rect) -> (Vec<Rect>, Vec<Rect>) {
+    pub fn update_layout_chunks(&mut self, app: &App, area: Rect) -> (Vec<Rect>, Vec<Rect>) {
+        let stage = &*app.stage.lock().unwrap();
+
         let constraint: Vec<Constraint> = match stage {
             _ => vec![
                 Constraint::Length(3),
@@ -166,9 +173,11 @@ impl<'a> AppLayout<'a> {
 
         let app_layout_chunks = self.layout.split(area);
         let list_layout_chunks = match stage {
-            _ => self
-                .list_layout
-                .update_layout_chunks(stage, app_layout_chunks[1]),
+            _ => self.list_layout.update_layout_chunks(
+                stage,
+                &app.sorting_order,
+                app_layout_chunks[1],
+            ),
         };
 
         (app_layout_chunks, list_layout_chunks)
