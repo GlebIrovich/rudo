@@ -16,7 +16,7 @@ use tui::Terminal;
 use crate::app::{App, AppStage};
 use crate::app_layout::AppLayout;
 use crate::todo_item::TodoItem;
-use crate::update::update;
+use crate::update::{update, CURRENT_APP_VERSION};
 
 use std::path::PathBuf;
 
@@ -46,7 +46,12 @@ fn main() -> Result<(), io::Error> {
     // Update application to the latest release
     match update() {
         Ok(version) => {
-            println!("Successfully updated to version {}", version);
+            if version == CURRENT_APP_VERSION {
+                println!("Rudo is up to date!");
+            } else {
+                println!("Successfully updated to version {}", version);
+                process::exit(0);
+            }
         }
         Err(error) if error.to_string().contains("Update aborted") => {}
         Err(error) => {
