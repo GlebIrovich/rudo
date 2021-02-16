@@ -108,7 +108,7 @@ impl<'a> ListLayout<'a> {
     }
 
     fn get_item_input_widget(&self, item_name: &str, block: Block<'a>) -> Paragraph<'a> {
-        Paragraph::new(format!("{}", item_name))
+        Paragraph::new(item_name.to_string())
             .block(block)
             .wrap(Wrap { trim: false })
             .alignment(Alignment::Left)
@@ -137,13 +137,11 @@ impl<'a> AppLayout<'a> {
     pub fn update_layout_chunks(&mut self, app: &App, area: Rect) -> (Vec<Rect>, Vec<Rect>) {
         let stage = &*app.stage.lock().unwrap();
 
-        let constraint: Vec<Constraint> = match stage {
-            _ => vec![
-                Constraint::Length(3),
-                Constraint::Min(4),
-                Constraint::Length(3),
-            ],
-        };
+        let constraint: Vec<Constraint> = vec![
+            Constraint::Length(3),
+            Constraint::Min(4),
+            Constraint::Length(3),
+        ];
 
         self.layout = Layout::default()
             .direction(Direction::Vertical)
@@ -172,13 +170,9 @@ impl<'a> AppLayout<'a> {
         };
 
         let app_layout_chunks = self.layout.split(area);
-        let list_layout_chunks = match stage {
-            _ => self.list_layout.update_layout_chunks(
-                stage,
-                &app.sorting_order,
-                app_layout_chunks[1],
-            ),
-        };
+        let list_layout_chunks =
+            self.list_layout
+                .update_layout_chunks(stage, &app.sorting_order, app_layout_chunks[1]);
 
         (app_layout_chunks, list_layout_chunks)
     }
@@ -207,7 +201,7 @@ impl<'a> AppLayout<'a> {
             filter_term
         };
 
-        Paragraph::new(format!("{}", text))
+        Paragraph::new(text.to_string())
             .block(block)
             .alignment(Alignment::Left)
     }
