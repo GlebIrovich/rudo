@@ -1,19 +1,19 @@
-use self_update::cargo_crate_version;
-use std::env;
-
 const REPO_OWNER: &str = "GlebIrovich";
 const REPO_NAME: &str = "rudo";
 const EXE_NAME: &str = "rudo";
 
-pub fn update() -> Result<(), Box<dyn ::std::error::Error>> {
+const CURRENT_APP_VERSION: &str = "0.2.1";
+
+pub fn update() -> Result<String, Box<dyn ::std::error::Error>> {
     let status = self_update::backends::github::Update::configure()
         .repo_owner(REPO_OWNER)
         .repo_name(REPO_NAME)
         .bin_name(EXE_NAME)
         .show_download_progress(true)
-        .current_version(cargo_crate_version!())
+        .current_version(CURRENT_APP_VERSION)
         .build()?
         .update()?;
-    println!("Update status: `{}`!", status.version());
-    Ok(())
+
+    let version = status.version().to_string();
+    Ok(version)
 }

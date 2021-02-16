@@ -1,8 +1,8 @@
-use std::io;
 use std::io::{stdin, stdout, Stdout};
 use std::sync::mpsc::Receiver;
 use std::sync::{mpsc, Arc, Mutex};
 use std::{fs, thread};
+use std::{io, process};
 
 use serde::{Deserialize, Serialize};
 use termion::event::Key;
@@ -17,6 +17,7 @@ use crate::app::{App, AppStage};
 use crate::app_layout::AppLayout;
 use crate::todo_item::TodoItem;
 use crate::update::update;
+
 use std::path::PathBuf;
 
 mod app;
@@ -44,7 +45,10 @@ enum TerminalEvent {
 fn main() -> Result<(), io::Error> {
     // Update application to the latest release
     match update() {
-        Ok(_) => {}
+        Ok(version) => {
+            println!("Successfully updated to version {}", version);
+        }
+        Err(error) if error.to_string().contains("Update aborted") => {}
         Err(error) => {
             println!("---------------------------------------");
             println!("Error occurred during update. Please report it here:");
@@ -52,6 +56,7 @@ fn main() -> Result<(), io::Error> {
 
             println!("{}", error);
             println!("---------------------------------------");
+            process::exit(1);
         }
     };
 
