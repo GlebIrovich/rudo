@@ -35,14 +35,14 @@ impl App {
     }
 
     pub fn add_new_item(&mut self) {
-        if self.item_name_input.len() == 0 {
+        if self.item_name_input.is_empty() {
             return;
         }
         self.list.items.push(TodoItem::new(&self.item_name_input));
     }
 
     pub fn update_item(&mut self) {
-        if self.item_name_input.len() == 0 {
+        if self.item_name_input.is_empty() {
             return;
         }
         match self.list.get_selected_item() {
@@ -58,45 +58,38 @@ impl App {
     }
 
     pub fn toggle_task(&mut self) {
-        match self.list.get_selected_item() {
-            Some(selected_item) => {
-                for item in &mut self.list.items {
-                    if item.id == selected_item.id {
-                        item.set_completion(!item.completed);
-                    }
+        if let Some(selected_item) = self.list.get_selected_item() {
+            for item in &mut self.list.items {
+                if item.id == selected_item.id {
+                    item.set_completion(!item.completed);
                 }
             }
-            _ => {}
         };
     }
 
     pub fn remove_task(&mut self) {
-        match self.list.get_selected_item() {
-            Some(selected_item) => {
-                let filtered_items: Vec<TodoItem> = self
-                    .list
-                    .items
-                    .iter()
-                    .filter(|item| item.id != selected_item.id)
-                    .cloned()
-                    .collect();
-                self.list = StatefulList::new(filtered_items);
-                self.select_first_task_or_none();
-            }
-            _ => {}
+        if let Some(selected_item) = self.list.get_selected_item() {
+            let filtered_items: Vec<TodoItem> = self
+                .list
+                .items
+                .iter()
+                .filter(|item| item.id != selected_item.id)
+                .cloned()
+                .collect();
+            self.list = StatefulList::new(filtered_items);
+            self.select_first_task_or_none();
         }
     }
 
     pub fn set_stage(&mut self, stage: AppStage) {
         self.reset_item_name_input();
         match stage {
-            AppStage::UpdateItem => match self.list.get_selected_item() {
-                Some(selected_item) => {
+            AppStage::UpdateItem => {
+                if let Some(selected_item) = self.list.get_selected_item() {
                     self.item_name_input = selected_item.name;
                     *self.stage.lock().unwrap() = stage;
                 }
-                _ => {}
-            },
+            }
             _ => *self.stage.lock().unwrap() = stage,
         }
     }
@@ -150,8 +143,7 @@ impl App {
     }
 
     pub fn get_stage_clone(&self) -> AppStage {
-        let stage = *self.stage.clone().lock().unwrap();
-        stage
+        *self.stage.clone().lock().unwrap()
     }
 
     pub fn get_filtered_items(&self) -> Vec<(usize, TodoItem)> {
@@ -188,7 +180,7 @@ impl App {
     }
 
     fn select_first_task_or_none(&mut self) {
-        if self.list.items.len() > 0 {
+        if !self.list.items.is_empty() {
             self.list.state.select(Some(0));
         } else {
             self.list.state.select(None);
@@ -300,7 +292,7 @@ mod tests {
     #[test]
     fn it_filters_items() {
         let items = create_todo_items();
-        let mut app = App::new(items.clone());
+        let mut app = App::new(items);
 
         app.filter_term_add_character('a');
         assert_eq!(app.filter_term, "a");
@@ -311,7 +303,7 @@ mod tests {
     #[test]
     fn it_should_keep_initial_list_enumeration() {
         let items = create_todo_items();
-        let mut app = App::new(items.clone());
+        let mut app = App::new(items);
 
         app.filter_term_add_character('b');
         assert_eq!(app.filter_term, "b");
@@ -321,8 +313,8 @@ mod tests {
 
     fn create_todo_items() -> Vec<TodoItem> {
         vec![
-            TodoItem::new(TASK_A_NAME.clone()),
-            TodoItem::new(TASK_B_NAME.clone()),
+            TodoItem::new(&(*TASK_A_NAME)),
+            TodoItem::new(&(*TASK_B_NAME)),
         ]
     }
 }

@@ -96,7 +96,7 @@ fn main() -> Result<(), io::Error> {
                     list_chunks[0],
                     &mut app.list.state,
                 );
-                app_layout.draw_help_widget(frame, app_chunks[2]);
+                app_layout.draw_help_widget(frame, &*app.stage.lock().unwrap(), app_chunks[2]);
 
                 match &*app.stage.lock().unwrap() {
                     AppStage::CreateItem | AppStage::UpdateItem => {
@@ -111,9 +111,8 @@ fn main() -> Result<(), io::Error> {
             })
             .expect("Terminal draw failed");
 
-        match key_down_handler(&key_events_receiver, &mut app, &mut terminal) {
-            true => break Result::Ok(()),
-            _ => (),
+        if let true = key_down_handler(&key_events_receiver, &mut app, &mut terminal) {
+            break Result::Ok(());
         };
     }
 }
@@ -206,14 +205,16 @@ fn key_action_mapper(
             },
         },
         TerminalEvent::Input(special_key) => match app.get_stage_clone() {
-            AppStage::CreateItem | AppStage::UpdateItem => match special_key {
-                Key::Backspace => app.item_input_remove_character(),
-                _ => (),
-            },
-            AppStage::Filter => match special_key {
-                Key::Backspace => app.filter_term_remove_character(),
-                _ => (),
-            },
+            AppStage::CreateItem | AppStage::UpdateItem => {
+                if let Key::Backspace = special_key {
+                    app.item_input_remove_character()
+                }
+            }
+            AppStage::Filter => {
+                if let Key::Backspace = special_key {
+                    app.filter_term_remove_character()
+                }
+            }
             AppStage::Default => match special_key {
                 Key::Backspace => app.remove_task(),
                 Key::Down => app.list.next(),
