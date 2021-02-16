@@ -96,7 +96,7 @@ fn main() -> Result<(), io::Error> {
                     list_chunks[0],
                     &mut app.list.state,
                 );
-                app_layout.draw_help_widget(frame, app_chunks[2]);
+                app_layout.draw_help_widget(frame, &*app.stage.lock().unwrap(), app_chunks[2]);
 
                 match &*app.stage.lock().unwrap() {
                     AppStage::CreateItem | AppStage::UpdateItem => {

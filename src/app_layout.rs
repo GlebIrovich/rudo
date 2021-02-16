@@ -119,8 +119,6 @@ pub struct AppLayout<'a> {
     pub layout: Layout,
     pub filter_block: Block<'a>,
     pub list_layout: ListLayout<'a>,
-    pub info_block: Block<'a>,
-    pub help_block: Paragraph<'a>,
 }
 
 impl<'a> AppLayout<'a> {
@@ -128,8 +126,6 @@ impl<'a> AppLayout<'a> {
         Self {
             layout: Layout::default(),
             filter_block: Block::default(),
-            info_block: Block::default(),
-            help_block: Paragraph::new(""),
             list_layout: ListLayout::new(),
         }
     }
@@ -157,18 +153,6 @@ impl<'a> AppLayout<'a> {
             .title("Filter")
             .border_style(Style::default().fg(border_color));
 
-        let help_block = Block::default().borders(Borders::ALL).title("Help");
-
-        self.help_block = match stage {
-            AppStage::Default => {
-                Paragraph::new("q - quit, s - sort, n - new task, e - edit, f - filter task")
-                    .block(help_block)
-            }
-            AppStage::CreateItem => Paragraph::new("Enter - add item").block(help_block),
-            AppStage::UpdateItem => Paragraph::new("Enter - apply changes").block(help_block),
-            AppStage::Filter => Paragraph::new("Enter - apply filter").block(help_block),
-        };
-
         let app_layout_chunks = self.layout.split(area);
         let list_layout_chunks =
             self.list_layout
@@ -177,11 +161,36 @@ impl<'a> AppLayout<'a> {
         (app_layout_chunks, list_layout_chunks)
     }
 
-    pub fn draw_help_widget<B>(&self, frame: &mut Frame<B>, area: Rect)
+    pub fn draw_help_widget<B>(&self, frame: &mut Frame<B>, stage: &AppStage, area: Rect)
     where
         B: Backend,
     {
-        frame.render_widget(self.help_block.clone(), area);
+        let info_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Min(5), Constraint::Length(15)]);
+
+        let help_block = Block::default().borders(Borders::ALL).title("Help");
+        let version_block = Block::default().borders(Borders::ALL);
+
+        let version_paragraph = Paragraph::new(format!("Rudo v{}", env!("CARGO_PKG_VERSION")))
+            .alignment(Alignment::Center);
+
+        let paragraph = match stage {
+            AppStage::Default => {
+                Paragraph::new("q - quit, s - sort, n - new task, e - edit, f - filter task")
+            }
+            AppStage::CreateItem => Paragraph::new("Enter - add item"),
+            AppStage::UpdateItem => Paragraph::new("Enter - apply changes"),
+            AppStage::Filter => Paragraph::new("Enter - apply filter"),
+        };
+
+        let info_layout_chunks = info_layout.split(area);
+
+        frame.render_widget(paragraph.block(help_block), info_layout_chunks[0]);
+        frame.render_widget(
+            version_paragraph.block(version_block),
+            info_layout_chunks[1],
+        );
     }
 
     pub fn draw_filter_widget<B>(&self, frame: &mut Frame<B>, filter_term: &str, area: Rect)
