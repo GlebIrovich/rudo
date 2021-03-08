@@ -1,5 +1,5 @@
 use std::io::{stdin, stdout, Stdout};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::{fs, thread};
 use std::{io, process};
@@ -19,6 +19,7 @@ use crate::todo_item::TodoItem;
 use crate::update::{update, CURRENT_APP_VERSION};
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 mod app;
 mod app_layout;
@@ -30,6 +31,10 @@ mod utils;
 struct Data {
     items: Vec<TodoItem>,
 }
+
+// How often app updates if key even is not received.
+// Required to maintain proper layout on window size change.
+const APP_TICK_MS: u64 = 100;
 
 fn dump(data: Data) {
     let (_path_to_file_dir, path_to_file) = get_file_path();
@@ -158,8 +163,11 @@ fn key_down_handler(
     app: &mut App,
     terminal: &mut Terminal<TermionBackend<RawTerminal<Stdout>>>,
 ) -> bool {
-    match receiver.recv() {
+    match receiver.recv_timeout(Duration::from_millis(APP_TICK_MS)) {
         Result::Ok(event) => key_action_mapper(event, app, terminal),
+        Err(RecvTimeoutError::Timeout) => {
+            return false;
+        }
         Err(_) => {
             return true;
         }
